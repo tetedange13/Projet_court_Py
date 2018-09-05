@@ -5,3 +5,8 @@ Liens vers la page de l'article:
 https://academic.oup.com/bioinformatics/article/20/17/2964/185954
 https://www.ncbi.nlm.nih.gov/pubmed/15180935
 
+Wikioedia:
+https://en.wikipedia.org/wiki/Hydrophobicity_scales
+https://en.wikipedia.org/wiki/Implicit_solvation#Accessible_surface_area-based_method
+
+https://opm.phar.umich.edu/about#features

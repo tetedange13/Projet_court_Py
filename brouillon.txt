@@ -1,0 +1,48 @@
+REMARQUES POUR MOI:
+-------------------
+* Vais devoir retrouver cette fonction que j'avais codée pendant les exo de py,
+qui permet d'extraire les coord des C-alpha d'un PDB
+
+* En fait, dans OPM, les PDB ont des coord transformees, pour que:
+_ La normale à la mb (calculee) coincide avec l'axe Z
+_ L'origine des coord correspond au milieu de la mb
+=> Servira de ref pour tester notre algo en fait ?
+
+_ Qu'est-ce qu'il entend par "hydrophobocité relative" dans l'ennoncé du projet?
+Relative par rapport à quoi exactement?
+
+
+DEMARCHE:
+---------
+* D'abord, "investigate" la proteine et le type de chaines.
+Omet les prot virales et de pilus, tout comme les entrees d'acides nucleiques,
+ou celles contenant moins de 15 aa.
+
+* Les structures de faible resolution, par exemple avec seulement les C-alpha ou le
+squelette sont traitees separemment (voir plus tard)
+
+* Ensuite y a une étape où ils utilisent BIOMOLECULE, je sais pas bien pourquoi
+
+* Puis on calcule la surface accessible au solvant de chaque aa avec NACCESS
+(dans l'article, c'est pas tout à fait formulé comme ça)
+
+* Ensuite, le coeur de l'algo, ca a l'air d'etre un truc de recherche de la
+position la plus probable du plan de la mb (relativement aux coord donnees), par 
+cacul la fitness de la localisation de cette mb, via "an objective function"
+
+* Cette "objective function", donne une "Q-value", qui a une composante
+structurale et une composante d'hydrophobicité. Elle permet de faire la classif
+On cherche le vecteur normal à la membrane
+
+
+FONCTIONS A CODER:
+------------------
+* Cacul du centre de masse de la prot (servira de point de depart pour la
+recherche du plan de mb optimal)
+
+* Definition et deplacement de la tranche de 1A
+=> Quelles sont ses dim exactement? Forme de pavé droit? De cylindre? De triangle?
+=> C'est pas vraiment un deplacement, c'est plus un decoupage de la prot en un
+certain nombre de tranche d'epaisseur 1A
+
+
