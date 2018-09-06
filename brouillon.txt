@@ -33,12 +33,18 @@ cacul la fitness de la localisation de cette mb, via "an objective function"
 * Cette "objective function", donne une "Q-value", qui a une composante
 structurale et une composante d'hydrophobicité. Elle permet de faire la classif
 On cherche le vecteur normal à la membrane
+=> Nous on va se contenter de calculer l'hydrophobicité relative
 
 
 FONCTIONS A CODER:
 ------------------
 * Cacul du centre de masse de la prot (servira de point de depart pour la
 recherche du plan de mb optimal)
+
+* Definition des droites, passant par le centre de masse et qui doivent
+parcourir l'espace dans les 3 directions.
+=> Comment faire pour disposer des droites dans l'espace et déterminer leurs
+équations? Y a 2 pas (un entre les droites sur un même plan et entre les plans)
 
 * Definition et deplacement de la tranche de 1A
 => Quelles sont ses dim exactement? Forme de pavé droit? De cylindre? De triangle?
