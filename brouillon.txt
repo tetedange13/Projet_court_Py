@@ -51,4 +51,39 @@ parcourir l'espace dans les 3 directions.
 => C'est pas vraiment un deplacement, c'est plus un decoupage de la prot en un
 certain nombre de tranche d'epaisseur 1A
 
+COORD POLAIRE SPHERIQUES:
+-------------------------
+* On a un système avec r (= le rayon), theta (angle entre 
+
+* En fait, ce qu'on
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

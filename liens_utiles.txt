@@ -8,5 +8,7 @@ https://www.ncbi.nlm.nih.gov/pubmed/15180935
 Wikipedia:
 https://en.wikipedia.org/wiki/Hydrophobicity_scales
 https://en.wikipedia.org/wiki/Implicit_solvation#Accessible_surface_area-based_method
+https://fr.wikipedia.org/wiki/Coordonn%C3%A9es_polaires#Coordonn%C3%A9es_sph%C3%A9riques
+https://fr.wikipedia.org/wiki/Boule_(solide)
 
 https://opm.phar.umich.edu/about#features
