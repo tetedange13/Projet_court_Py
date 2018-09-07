@@ -40,6 +40,7 @@ FONCTIONS A CODER:
 ------------------
 * Cacul du centre de masse de la prot (servira de point de depart pour la
 recherche du plan de mb optimal)
+=> Sera l'origine du repère
 
 * Definition des droites, passant par le centre de masse et qui doivent
 parcourir l'espace dans les 3 directions.
@@ -51,11 +52,35 @@ parcourir l'espace dans les 3 directions.
 => C'est pas vraiment un deplacement, c'est plus un decoupage de la prot en un
 certain nombre de tranche d'epaisseur 1A
 
+* Faudra coder une fonction qui, à partir des coord (x;y;z) d'un point, va
+déterminer les coord de la tranche associée
+
+* Aussi une fonction qui, à partir des coord de la tranche, va regarder quels
+aa sont dedans, pour pouvoir calculer l'hydrophobicité relative de la tranche 
+
+
 COORD POLAIRE SPHERIQUES:
 -------------------------
-* On a un système avec r (= le rayon), theta (angle entre 
+* On a un système avec r (= le rayon), theta (angle entre x et y) et phi (angle
+entre z et la projection du point sur le plan xy)
 
-* En fait, ce qu'on
+* Formules:
+x = r * sin(phi) * cos(theta)
+y = r * sin(phi) * sin(theta)
+z = r * cos(theta)
+
+* Je vais faire une boule de révolution:
+1) Définir un disque, qui correspond à plusieurs vecteurs répartis régulièrement 
+dans un même plan (theta = 0 ?)
+2) Faire tourner ce disque, en faisant varier theta entre 0 et pi
+3) Calculer à chaque fois les coord des points, délimitant la tranche
+4) Calculer l'hydrophobité relative de toutes les tranches
+=> Ca fera une matrice carrée, où chaque coeff sera une valeur d'hydrophobicité
+relative 
+5) Faut faire ça à chaque étape en fait, en augmentant le rayon de la sphère de 
+révol de 1A, puis faire la moyenne de toutes les matrices
+
+
 
 
 
