@@ -12,3 +12,9 @@ https://fr.wikipedia.org/wiki/Coordonn%C3%A9es_polaires#Coordonn%C3%A9es_sph%C3%
 https://fr.wikipedia.org/wiki/Boule_(solide)
 
 https://opm.phar.umich.edu/about#features
+
+Forum de math, donnant l'eq d'un plan tangeant à une sphère:
+https://www.ilemaths.net/sujet-plan-tangent-a-une-sphere-185366.html
+
+Distance entre 1 point et un plan:
+http://mathonline.wikidot.com/the-distance-between-parallel-planes

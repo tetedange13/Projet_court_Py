@@ -97,8 +97,30 @@ def rempli_arr(step, angle):
     
     return (arr_cos, arr_sin)        
         
+
+def dist_point_plane(point, plane):
+    """Prend un point = (x0; y0; z0; 1) provenant du pdb 
+    et un plan = (a, b; c; d), avec:
+        (a; b; c)  = (x; y; z) du point au bout d'un vecteur 
+        et d = rayon de la sphère"""
         
-        
+    numer = abs( point @ plane.T )
+    denom = np.sqrt( plane[0:4, ] @ plane[0:4, ].T )
+    return numer/denom
+    
+
+def is_in_slice(point, planeI, planeI_plus1):
+    """Determine if a given C-alpha (aka point with (x;y;z) coord) is inside a
+    given slice of 1A wide (between planeI and planeI_plus1)"""
+    
+    if dist_point_plane(point, planeI) < 1 
+                                and dist_point_plane(point, planeI_plus1) < 1:
+        return 1    
+    
+    else:
+        return 0                                
+    
+            
 #MAIN
 
 #Formulas, from polar to cartesian:
@@ -117,20 +139,23 @@ arr_cos_phi, arr_sin_phi = rempli_arr(step, "phi")
 
 #Use of matricial product to calculate each of the x, y and z matrixes
 #(necessity to reshape the phi matrixes, to make the product)
-size_arr_phi = np.shape(arr_cos_phi)[0]
 size_arr_theta = np.shape(arr_cos_theta)[0]  
-X_arr = r * arr_cos_theta @ arr_sin_phi.reshape(1, size_arr_phi)
-Y_arr = r * arr_sin_theta @ arr_sin_phi.reshape(1, size_arr_phi)
-Z_arr = r * np.array( [arr_cos_phi.reshape(1, size_arr_phi)] * size_arr_theta )
+X_arr = r * arr_cos_theta @ arr_sin_phi.T
+Y_arr = r * arr_sin_theta @ arr_sin_phi.T
+Z_arr = r * np.tile( arr_cos_phi.T, (size_arr_theta, 1) ) 
 
 #REMARK: The Z_arr has been created by repeating the line of cos(phi) as many
 #times there are values for the theta angle
+
+mon_plan = np.array( [X_arr[2,2], Y_arr[2,1], Z_arr[2,1], -r**2] )
+mon_point = np.array( [1, 2, 3, 1] ) 
+print( dist_point_plane(mon_point, mon_plan) )
     
-print(X_arr)
-print("\n ESPACE\n")
-print(Y_arr)
-print("\n ESPACE\n")
-print(Z_arr)
+#print(X_arr)
+#print("\n ESPACE\n")
+#print(Y_arr)
+#print("\n ESPACE\n")
+#print(Z_arr)
 
 
 

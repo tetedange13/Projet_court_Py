@@ -7,9 +7,13 @@ qui permet d'extraire les coord des C-alpha d'un PDB
 _ La normale à la mb (calculee) coincide avec l'axe Z
 _ L'origine des coord correspond au milieu de la mb
 => Servira de ref pour tester notre algo en fait ?
+=> Suffit de mesurer l'écart entre l'axe Z d'OPM et le nôtre
 
 _ Qu'est-ce qu'il entend par "hydrophobocité relative" dans l'ennoncé du projet?
 Relative par rapport à quoi exactement?
+
+_ Faudra transformer les coordonnées du pdb d'origine, nan? Pour que l'origine 
+du repère devienne le centre de masse
 
 
 DEMARCHE:
@@ -57,6 +61,10 @@ déterminer les coord de la tranche associée
 
 * Aussi une fonction qui, à partir des coord de la tranche, va regarder quels
 aa sont dedans, pour pouvoir calculer l'hydrophobicité relative de la tranche 
+=> Ca sera surement une fonction qui calcule la dist d'un point à un plan 
+(tangeant à la sphère)
+=> Un point situé entre les 2 plans (parallèles), sera à une dist inférieure à 
+1A de chacun des plans en principes
 
 
 COORD POLAIRE SPHERIQUES:
@@ -79,6 +87,25 @@ dans un même plan (theta = 0 ?)
 relative 
 5) Faut faire ça à chaque étape en fait, en augmentant le rayon de la sphère de 
 révol de 1A, puis faire la moyenne de toutes les matrices
+
+
+PLAN TANGEANT A UNE SPHERE:
+---------------------------
+Effectivement, si M(a,b,c) est sur la sphère, le vecteur OM sera normal au plan 
+tangent (T).
+Pour tout point P(x,y,z) de (T), on a donc les vecteurs OM et MP qui sont 
+orthogonaux.
+
+Alors leur produit scalaire vaut 0. Cela donne :
+
+a(x-a) + b(y-b) + c(z-c) = 0
+
+En développant: ax + by + cz = a² + b² + c²
+
+Or, M étant sur la sphère de rayon R: a² + b² + c² = R²
+
+Finalement : (T) a pour équation ax + by +cz = R²
+Ou encore: ax + by +cz - R² = 0
 
 
 
