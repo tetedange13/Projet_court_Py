@@ -22,4 +22,7 @@ http://mathonline.wikidot.com/the-distance-between-parallel-planes
 Formule pour calc le centre de masse:
 https://study.com/academy/lesson/calculating-center-of-mass-definition-equation-example.html
 
+Toutes les fonctions de biopython:
+http://biopython.org/DIST/docs/api/Bio-module.html
+
 
