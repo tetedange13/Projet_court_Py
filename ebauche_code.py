@@ -4,12 +4,45 @@
 import numpy as np
 import sys
 
-def polar_to_cartes(r, theta, phi):
-    """Permet de stepser des coord polaires aux coord cartesiennes (x;y;z), a 
-    partir du rayon et des angles phi et theta"""
-    return np.array([ r*np.sin(phi)*np.cos(theta), 
-             r*np.sin(phi)*np.sin(theta),
-             r*np.cos(phi) ])
+def get_C_alpha_coord(pdbFile):
+    """Get the coordinate of the C-alpha from a pdb file (file obj) 
+    given as argument. Count also the number of C-alpha"""
+    
+    coord_dict = {}
+    nb_Calpha = 0
+    for line in pdbFile:
+        if line.startswith( "ATOM" ) and line[12:16].strip() == "CA":
+            nb_Calpha += 1
+            resid = int( line[22:26].strip() )
+            coord = { 'x': float( line[30:38].strip() ), 
+                      'y': float( line[38:46].strip() ), 
+                      'z': float( line[46:54].strip() ) 
+                    }
+            coord_dict[resid] = coord
+    
+    return (coord_dict, nb_Calpha-1)
+
+
+def calc_centerOfmass(dict_coord, nb_Calpha):
+    """Calculate the centroid (center of mass) of a protein, given the 
+    coordinates of all its C-alpha, and return a transformed coord dict"""
+    
+    x_sum, y_sum, z_sum = 0, 0, 0 
+    for resid in dict_coord.keys():
+        x_sum += dict_coord[resid]['x']
+        y_sum += dict_coord[resid]['y']
+        z_sum += dict_coord[resid]['z']
+    
+    centerOfMass = np.array( [x_sum, y_sum, z_sum]) / nb_Calpha
+    
+    tranformed_dict = dict_coord
+    for resid in dict_coord.keys():
+        tranformed_dict[resid]['x'] -= centerOfMass[0]
+        tranformed_dict[resid]['y'] -= centerOfMass[1]
+        tranformed_dict[resid]['z'] -= centerOfMass[2]
+    
+    return (centerOfMass, tranformed_dict)
+    
              
 
 def rempli_arr(step, angle):
@@ -96,31 +129,59 @@ def rempli_arr(step, angle):
 
     
     return (arr_cos, arr_sin)        
+
+
+#def plane_equation():
+    
         
 
 def dist_point_plane(point, plane):
-    """Prend un point = (x0; y0; z0; 1) provenant du pdb 
+    """Prend un point provenant du pdb (donc un dict)
     et un plan = (a, b; c; d), avec:
-        (a; b; c)  = (x; y; z) du point au bout d'un vecteur 
-        et d = rayon de la sphère"""
+        -- (a; b; c)  = (x; y; z) du point au bout d'un vecteur 
+        -- et d = rayon de la sphère"""
+    
+    arr_point = (x0; y0; z0; 1)
         
     numer = abs( point @ plane.T )
     denom = np.sqrt( plane[0:4, ] @ plane[0:4, ].T )
     return numer/denom
     
 
-def is_in_slice(point, planeI, planeI_plus1):
+def is_in_slice(point, planeDown, planeUp):
     """Determine if a given C-alpha (aka point with (x;y;z) coord) is inside a
     given slice of 1A wide (between planeI and planeI_plus1)"""
     
-    if dist_point_plane(point, planeI) < 1 
-                                and dist_point_plane(point, planeI_plus1) < 1:
+    if dist_point_plane(point, planeDown) < 1 \
+                                and dist_point_plane(point, planeUp) < 1:
         return 1    
     
     else:
         return 0                                
     
-            
+def fonction (r):
+    size_arr_theta = np.shape(arr_cos_theta)[0]  
+    X_arr_down, X_arr_up = r * arr_cos_theta @ arr_sin_phi.T, \
+                           (r+1) * arr_cos_theta @ arr_sin_phi.T
+    Y_arr_down, Y_arr_up = r * arr_sin_theta @ arr_sin_phi.T, \
+                           (r+1) * arr_sin_theta @ arr_sin_phi.T
+    Z_arr_down, Z_arr_up = r * np.tile( arr_cos_phi.T, (size_arr_theta, 1) ), \
+                           (r+1) * np.tile( arr_cos_phi.T, (size_arr_theta, 1) )  
+    
+    point = np.array([)
+    taille_i, taille_j = np.shape(X_arr_down)
+    for i in range(taille_i):
+        for j in range(taille_j):
+            planeDown = np.array( [X_arr_down[i,j],
+                                   Y_arr_down[i,j],
+                                   Z_arr_down[i,j],
+                                   -r**2 ] )
+            planeUp = np.array( [X_arr_up[i,j],
+                                   Y_arr_up[i,j],
+                                   Z_arr_up[i,j],
+                                   -r**2 ] )
+            print(is_in_slice(
+         
 #MAIN
 
 #Formulas, from polar to cartesian:
@@ -132,7 +193,7 @@ r = 3
 step = int(sys.argv[1])
 
 
-
+#These arrays need to be created only one:
 arr_cos_theta, arr_sin_theta = rempli_arr(step, "theta")
 arr_cos_phi, arr_sin_phi = rempli_arr(step, "phi")
 
@@ -149,7 +210,25 @@ Z_arr = r * np.tile( arr_cos_phi.T, (size_arr_theta, 1) )
 
 mon_plan = np.array( [X_arr[2,2], Y_arr[2,1], Z_arr[2,1], -r**2] )
 mon_point = np.array( [1, 2, 3, 1] ) 
-print( dist_point_plane(mon_point, mon_plan) )
+#print( dist_point_plane(mon_point, mon_plan) )
+
+mon_pdb = open("/home/sdv/m2bi/fvandermeeren/Bureau/6gx6.pdb", 'r')
+coord_mon_pdb, nb_Calpha = get_C_alpha_coord(mon_pdb)
+mon_pdb.close()
+
+
+print(nb_Calpha)
+print(len(coord_mon_pdb))
+
+#for resid in coord_mon_pdb:
+#    print(coord_mon_pdb[resid])
+
+centerOfMass, transformed_coord = calc_centerOfmass(coord_mon_pdb, nb_Calpha)
+
+print( calc_centerOfmass(transformed_coord, nb_Calpha)[0] )
+
+
+fonction(3)
     
 #print(X_arr)
 #print("\n ESPACE\n")

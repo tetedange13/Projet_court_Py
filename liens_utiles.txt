@@ -18,3 +18,8 @@ https://www.ilemaths.net/sujet-plan-tangent-a-une-sphere-185366.html
 
 Distance entre 1 point et un plan:
 http://mathonline.wikidot.com/the-distance-between-parallel-planes
+
+Formule pour calc le centre de masse:
+https://study.com/academy/lesson/calculating-center-of-mass-definition-equation-example.html
+
+
