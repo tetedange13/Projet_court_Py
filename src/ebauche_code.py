@@ -8,16 +8,42 @@ from Bio.PDB import PDBParser
 import os
 
 
-def get_C_alpha_coord(vectArr_Z):
-    """Get the coordinate of the C-alpha from a pdb file (file obj) 
+def use_NACCESS(pdb_id, path_to_naccess_exe, thresold_ASA):
+    """Takes the pdb id (as a str) and runs NACCESS on it (ASA calculation)"""
+    
+    pdb_fileName = pdb_id + ".pdb"
+    p = PDBParser()
+    structure = p.get_structure(pdb_id, pdb_fileName)
+    model = structure[0]
+    output_naccess = run_naccess(model, pdb_fileName, 
+                                 naccess = path_to_naccess_exe)[0]
+    
+    ASA_dict = {}
+    for line in output_naccess:
+        if line.startswith("RES"):
+            splitted_line = line.split()
+            resName, resid = splitted_line[1], splitted_line[1]
+            rel_ASA = splitted_line[5]
+            
+            if rel_ASA >= thresold_ASA:
+                ASA_dict[resid] = { 'resName': resName, 'rel_ASA': rel_ASA }
+                
+                
+    #return results_naccess
+
+
+def accessible_C_alpha_coord(pdbFile):
+    """Get the coordinate of the C-alpha which are accessible to the solvent 
+    (i.e. ASA beyond the threesold), from a pdb file (file obj) 
     given as argument. Count also the number of C-alpha"""
     
     coord_dict = {}
     nb_Calpha = 0
-    for line in vectArr_Z:
+    for line in pdbFile:
         if line.startswith( "ATOM" ) and line[12:16].strip() == "CA":
-            nb_Calpha += 1
+            
             resid = int( line[22:26].strip() )
+            if resid
             coord = { 'x': float( line[30:38].strip() ), 
                       'y': float( line[38:46].strip() ), 
                       'z': float( line[46:54].strip() ) 
@@ -157,7 +183,7 @@ def dist_point_plane(point, plane):
     return numer/denom
 
     
-def start_position_plane(unit_vect):
+def start_position_plane(unit_vect, coord_pdbFile):
     """Takes an array containing the coord of a unit vect, calculate the array
     with the distance between all the C-alpha of the protein and the plane
     which is orthogonal to the given vector.
@@ -168,7 +194,7 @@ def start_position_plane(unit_vect):
     initial_dist = 1000
     initial_plane = np.hstack( (initial_dist*unit_vect, -initial_dist**2) )
     start_dist_arr = np.zeros((nb_Calpha, 1)) #Dist between each point and the plane
-    resid_list = [0] * nb_Calpha #To be able to index the resid, for the min 
+    
     
     i = 0 
     for resid in coord_pdbFile.keys():
@@ -176,17 +202,15 @@ def start_position_plane(unit_vect):
                                                 initial_plane )
         resid_list[i] = resid
         i += 1
-    #print(np.argmin(dist_arr))
+
     dist_closer = np.floor( initial_dist - np.min(start_dist_arr) )
     dist_further = np.floor( initial_dist - np.max(start_dist_arr) ) 
     #=> Que faire si la dist entre le plus pres et le plus loi es trop petite ??
     
-    #coord_closer = coord_pdbFile[ resid_list[np.argmin(dist_arr)] ]
-    
     #We transform the dist array, to adapt to the well positionned plane:
     start_dist_arr -= (initial_dist - dist_closer)
-    #print(dist_arr)
     nb_slides = dist_closer - dist_further + 15 #OUI je pense
+    
     return ( nb_slides, start_dist_arr )
 
 
@@ -238,20 +262,6 @@ def is_in_slice(point, planeDown, planeUp):
     
     else:
         return 0                                
-
-
-def use_NACCESS(pdb_id):
-    """Takes the pdb id (as a str) and runs NACCESS on it (ASA calculation)"""
-    
-    pdb_fileName = pdb_id + ".pdb"
-    p = PDBParser()
-    structure = p.get_structure(pdb_id, pdb_fileName)
-    model = structure[0]
-    results_naccess = run_naccess(model, pdb_fileName, 
-                                  naccess="/home/sdv/m2bi/fvandermeeren/Naccess")
-    
-    print(results_naccess)
-    return results_naccess
     
     
 def fonction_pple (r, point):
@@ -287,7 +297,8 @@ def fonction_pple (r, point):
 #z = r * cos(phi)
 
 r = 3
-precision = int(sys.argv[1])
+arg_cmd = sys.argv
+precision = int(arg_cmd[1])
 
 
 #These arrays need to be created only one:
@@ -307,25 +318,30 @@ vectArr_Z = np.tile( arr_cos_phi.T, ((precision+1), 1) )
 
 
 pdb_id = "6gx6"
-print(os.path.dirname(__file__))
-pdbFile = open("./data/" + pdb_id + ".pdb", 'r')
-coord_pdbFile, nb_Calpha = get_C_alpha_coord(pdbFile)
-use_NACCESS(pdb_id)
+pdbFile = open('./src/../data/' + pdb_id + ".pdb", 'r')
+coord_mon_pdbFile, nb_Calpha = get_C_alpha_coord(pdbFile)
+pdbFile.close()
+if len(arg_cmd) == 2:
+    path_to_naccess_exe = 'naccess'
+else:
+    path_to_naccess_exe = arg_cmd[2]
+    
+use_NACCESS(pdb_id, path_to_naccess_exe)
 #Faudrait parser l'output de NACCESS une bonne fois pour toute, pour que ca soit
 #moins lourd a lire => Puis stocker ca dans une variable "content_naccesFile"
-pdbFile.close()
+
 
 
 #for resid in coord_pdbFile:
 #    print(coord_pdbFile[resid])
 
-centerOfMass = calc_centerOfmass(coord_pdbFile, nb_Calpha)
-transformed_coord = transform_coord(coord_pdbFile, centerOfMass)
+centerOfMass = calc_centerOfmass(coord_mon_pdbFile, nb_Calpha)
+transformed_coord = transform_coord(coord_mon_pdbFile, centerOfMass)
 
 
 #fonction(5, transformed_coord[56])
 mon_vect = np.array( [vectArr_X[4, 4], vectArr_Y[4, 4], vectArr_Z[4, 4]] )
-toto, tata = positionning_plane(mon_vect)
+#toto, tata = positionning_plane(mon_vect)
 
     
 
