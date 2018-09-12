@@ -141,7 +141,9 @@ def generate_sinCos_arr(precision, angle):
             
     #N-E DIAL (will serve as a reference to fill the other dial):
     i=1
-    for angle in np.arange(np.pi/precision, np.pi/2 - 1/precision, np.pi/precision):
+    for angle in np.arange(np.pi/precision, 
+                           np.pi/2 - 1/precision, 
+                           np.pi/precision):
     #J'ai trouve le "-1/pas" un peu empiriquement => A VOIR...
         arr_cos[i, 0] = np.cos(angle)
         arr_sin[i, 0] = np.sin(angle)
