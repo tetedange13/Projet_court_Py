@@ -97,10 +97,9 @@ def transform_coord(dict_coord, centerOfMass):
 
 
 
-def generate_sinCos_arr(precision, angle):
+def generate_sinCos_arr(precision):
     """Prend un pas (sorte de resolution), decoupe le cercle trigo et renvoie 2
-     matrices colonnes des cos et sin de ces angles
-     Fonctionne aussi bien pour theta que pour phi"""
+     matrices colonnes des cos et sin de ces angles"""
      
     #Prop of trigo functions trigo used:
     #cos(pi-x) = -cos(x) ; sin(pi-x) = sin(x) <=> N-O dial
@@ -110,18 +109,9 @@ def generate_sinCos_arr(precision, angle):
     
     #We 1st disinguish the cases where we have to deal with theta (from 0 to 2pi)
     #Or phi (from à to pi):
-    if angle == "theta":
-        arr_cos = np.zeros((2*precision, 1), dtype=float)
-        arr_sin = np.zeros((2*precision, 1), dtype=float)
-        nb_dials = 4
-        
-    elif angle == "phi":       
-        arr_cos = np.zeros((precision+1, 1), dtype=float)
-        arr_sin = np.zeros((precision+1, 1), dtype=float)
-        nb_dials = 2 
-    
-    else:
-        sys.exit("Pas bon argument donne pour l'angle")
+   
+    arr_cos = np.zeros((precision+1, 1), dtype=float)
+    arr_sin = np.zeros((precision+1, 1), dtype=float)
     
 
     #We start with filling with evident values (not zero) of cos et sin:
@@ -130,13 +120,10 @@ def generate_sinCos_arr(precision, angle):
     #En pi:
     arr_cos[precision, 0] = -1.0
     
-    if precision%2 == 0: #If the precision is even, there are 2 more (pi/2 and 3pi/2)
+    if precision%2 == 0: #If the precision is even, there is also pi/2
         idx_pi_over_2 = int( (precision+1)/2 )
         #En pi/2:
-        arr_sin[idx_pi_over_2, 0] = 1.0
-        if angle == "theta": #This value won'be needed for phi
-            #En 3pi/2:
-            arr_sin[3*idx_pi_over_2, 0] = -1.0        
+        arr_sin[idx_pi_over_2, 0 ] = 1.0 
             
             
     #N-E DIAL (will serve as a reference to fill the other dial):
@@ -149,8 +136,15 @@ def generate_sinCos_arr(precision, angle):
         arr_sin[i, 0] = np.sin(angle)
         i += 1     
     
-    #N-O dial:
+    #N-O dial:  
     nb_to_calc = i - 1 #Number of values to calculate
+    
+    #Depending on the parity of the precision, the start changes:
+    if precision%2 == 0:  
+        start = idx_pi_over_2 + 1
+    else:
+        start = i 
+        
     end = start + nb_to_calc
     
     arr_cos[start:end, 0] = -arr_cos[1:i, 0][::-1]
@@ -317,13 +311,10 @@ dict_CA, list_resid, centerOfMass = get_coord( dict_CA,
                                                nb_tot_CA,
                                                pdbFile)
 pdbFile.close()
-print(centerOfMass)
-print(dict_CA[1])
 
 
 # 2) We transform the coordinates to set the center of mass as the origin:
 dict_CA = transform_coord(dict_CA, centerOfMass)
-print(dict_CA[1])
 
 
 # 3) We generate the  arrays corresponding respecsinCos_arr
@@ -332,13 +323,16 @@ print(dict_CA[1])
 #y = r * sin(phi) * sin(theta)
 #z = r * cos(phi)
 
-r = 3
 precision = int(arg_cmd[1])
 
 
 #These arrays need to be created only one:
-arr_cos_theta, arr_sin_theta = generate_sinCos_arr(precision, "phi")
+arr_cos_theta, arr_sin_theta = generate_sinCos_arr(precision)
 arr_cos_phi, arr_sin_phi = arr_cos_theta, arr_sin_theta
+
+print(arr_cos_theta)
+print("\n ESPACE \n")
+print(arr_sin_theta)
 
 
 #Use of matricial product to calculate each of the x, y and z matrixes
