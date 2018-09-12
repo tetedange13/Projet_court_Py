@@ -184,12 +184,26 @@ def positionning_plane(unit_vect):
     #We transform the dist array, to adapt to the well positionned plane:
     dist_arr -= (initial_dist - dist_closer)
     print(dist_arr)
-    nb_slides = dist_closer - dist_further
+    nb_slides = dist_closer - dist_further + 15 #OUI je pense
     return ( nb_slides, dist_arr )
 
 
-def sliding_slice(dist_closer, dist_further, dist_arr):
-    for r in range(dist_closer, dist_further, -1):
+def examine_arr(dist_arr, content_naccesFile):
+    nb_accessible, nb_hydroph_accessible = 0, 0
+    list_hydroph_aa = ["", "", "", "", ""] #All the a  considered as hydrophobic
+    
+    for i in range(nb_Calpha):
+        if -15 <= dist_arr[i, ] <= 0 and: #For the aa in the slice
+            nb_accessible += 1
+            aa = n
+            if aa in ["" 
+            
+    return nb_hydroph/
+
+def sliding_slice(nb_slides, dist_arr):
+    hydroph_arr = np.zeros( (nb_slides, 1) )
+    for r in range(nb_slides):
+        examine_arr
         
     
 
@@ -273,6 +287,8 @@ pdb_id = "6gx6"
 pdbFile = open("/home/sdv/m2bi/fvandermeeren/Bureau/" + pdb_id + ".pdb", 'r')
 coord_pdbFile, nb_Calpha = get_C_alpha_coord(pdbFile)
 #use_NACCESS(pdb_id)
+#Faudrait parser l'output de NACCESS une bonne fois pour toute, pour que ca soit
+#moins lourd a lire => Puis stocker ca dans une variable "content_naccesFile"
 pdbFile.close()
 
 
