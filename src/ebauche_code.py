@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-#import math as m
 import numpy as np
 import sys
 from Bio.PDB.NACCESS import run_naccess
@@ -8,8 +7,9 @@ from Bio.PDB import PDBParser
 import os
 
 
-def use_NACCESS(pdb_id, path_to_naccess_exe, thresold_ASA):
-    """Takes the pdb id (as a str) and runs NACCESS on it (ASA calculation)"""
+
+def get_acessible_CA(pdb_id, path_to_naccess_exe, thresold_ASA):
+    """Takes the pdb id (as a str), runs NACCESS on it (ASA calculation)"""
     
     pdb_fileName = pdb_id + ".pdb"
     p = PDBParser()
@@ -18,66 +18,79 @@ def use_NACCESS(pdb_id, path_to_naccess_exe, thresold_ASA):
     output_naccess = run_naccess(model, pdb_fileName, 
                                  naccess = path_to_naccess_exe)[0]
     
-    ASA_dict = {}
+    dict_CA = {} #Contains all useful info for CA
+    nb_accessible_CA = 0
+    nb_tot_CA = 0
+    
     for line in output_naccess:
-        if line.startswith("RES"):
-            splitted_line = line.split()
-            resName, resid = splitted_line[1], splitted_line[1]
-            rel_ASA = splitted_line[5]
+        splitted_line = line.split()
+        type_line = splitted_line[0]
+        resName = splitted_line[1]
+        
+        if type_line == "RES" and len(resName) == 3:
+            nb_tot_CA += 1
+            
+            resid = splitted_line[3]
+            rel_ASA = float(splitted_line[5])
             
             if rel_ASA >= thresold_ASA:
-                ASA_dict[resid] = { 'resName': resName, 'rel_ASA': rel_ASA }
-                
-                
-    #return results_naccess
+                nb_accessible_CA += 1
+                dict_CA[resid] = { 'resName': resName, 
+                                    'rel_ASA': rel_ASA }
+                 
+    return (dict_CA, nb_accessible_CA, nb_tot_CA)
 
 
-def accessible_C_alpha_coord(pdbFile):
+def get_coord(nb_tot_CA, dict_CA, nb_accessible_CA, pdbFile):
     """Get the coordinate of the C-alpha which are accessible to the solvent 
     (i.e. ASA beyond the threesold), from a pdb file (file obj) 
     given as argument. Count also the number of C-alpha"""
     
-    coord_dict = {}
-    nb_Calpha = 0
+    dict_CA_final = dict_CA #To avoid side effects
+    
+    #To index the resid
+    list_resid = [0] * nb_tot_CA ; i = 0
+    #To calculate the center of mass of the protein
+    sum_X, sum_Y, sum_Z = 0, 0, 0 
+    
     for line in pdbFile:
         if line.startswith( "ATOM" ) and line[12:16].strip() == "CA":
-            
             resid = int( line[22:26].strip() )
-            if resid
-            coord = { 'x': float( line[30:38].strip() ), 
-                      'y': float( line[38:46].strip() ), 
-                      'z': float( line[46:54].strip() ) 
-                    }
-            coord_dict[resid] = coord
+            X_coord = float( line[30:38].strip() )
+            Y_coord = float( line[38:46].strip() )
+            Z_coord = float( line[46:54].strip() )
+            
+            #To calculate the center of mass of the protein:
+            sum_X += X_coord ; sum_Y += Y_coord ; sum_Z += Z_coord
+            
+            if resid in dict_CA.keys():
+                list_resid[i] = resid
+                
+                dict_CA_final[resid]['x'] = X_coord 
+                dict_CA_final[resid]['y'] = Y_coord 
+                dict_CA_final[resid]['z'] = Z_coord  
     
-    return (coord_dict, nb_Calpha-1)
-
-
-def calc_centerOfmass(dict_coord, nb_Calpha):
-    """Calculate the centroid (center of mass) of a protein, given the 
-    coordinates of all its C-alpha, and return """
     
-    x_sum, y_sum, z_sum = 0, 0, 0 
-    for resid in dict_coord.keys():
-        x_sum += dict_coord[resid]['x']
-        y_sum += dict_coord[resid]['y']
-        z_sum += dict_coord[resid]['z']
-    
-    return np.array( [x_sum, y_sum, z_sum]) / nb_Calpha
+    centerOfMass = [ sum_X/nb_tot_CA, sum_Y/nb_tot_CA, sum_Z/nb_tot_CA ] 
+    return (dict_CA_final, list_resid, centerOfMass)
 
 
+ 
 def transform_coord(dict_coord, centerOfMass):
-    """Takes the dict of coord of the C-alpha and an array (x; y; z) 
-    corresponding to the coordinates of the center of mass and return a dict 
-    with transformed coord """
-
-    transformed_dict = dict_coord
+    """Takes the coordinates of the CA of the protein, its center of mass and
+    returns a dict with transformed coord, i.e. with the center of mass set as 
+    the origin of the system."""
+ 
+    transformed_dict = dict_coord #To avoid side effects
     for resid in dict_coord.keys():
         transformed_dict[resid]['x'] -= centerOfMass[0]
         transformed_dict[resid]['y'] -= centerOfMass[1]
         transformed_dict[resid]['z'] -= centerOfMass[2]
-             
+        
+        
     return transformed_dict
+
+
 
 def generate_sinCos_arr(precision, angle):
     """Prend un pas (sorte de resolution), decoupe le cercle trigo et renvoie 2
@@ -164,11 +177,13 @@ def generate_sinCos_arr(precision, angle):
     return (arr_cos, arr_sin)        
     
 
+
 def dict_to_arr(point):
     """Takes a point as a dict and convert it in a array(3,1)"""
     
     return np.array( [ point['x'], point['y'], point['z'] ] )
         
+
 
 def dist_point_plane(point, plane):
     """Prend un point provenant du pdb (donc un dict)
@@ -181,6 +196,7 @@ def dist_point_plane(point, plane):
     numer = abs( arr_point @ plane.T )
     denom = np.sqrt( plane[0:3, ] @ plane[0:3, ].T )
     return numer/denom
+
 
     
 def start_position_plane(unit_vect, coord_pdbFile):
@@ -214,6 +230,7 @@ def start_position_plane(unit_vect, coord_pdbFile):
     return ( nb_slides, start_dist_arr )
 
 
+
 def freq_hydrophob(start_dist_arr, content_naccesFile):
     """Read the dist_arr, in order to find which one are in the current slice.
     Then goes in the NACCESS output file, to know if it is an hydrophobic
@@ -235,6 +252,7 @@ def freq_hydrophob(start_dist_arr, content_naccesFile):
     return nb_hydrophob_accessible/nb_accessible
 
 
+
 def sliding_slice(nb_slides, start_dist_arr):
     """Takes a slice positionned at its start point, by taking 
     its start_dist_arr. 
@@ -252,6 +270,7 @@ def sliding_slice(nb_slides, start_dist_arr):
     return sum_freq_hydrophob/nb_slides
     
 
+
 def is_in_slice(point, planeDown, planeUp):
     """Determine if a given C-alpha (aka point with (x;y;z) coord into a dict) 
     is inside a given slice of 1A wide (between planeI and planeI_plus1)"""
@@ -264,6 +283,7 @@ def is_in_slice(point, planeDown, planeUp):
         return 0                                
     
     
+   
 def fonction_pple (r, point):
     size_arr_theta = np.shape(arr_cos_theta)[0]  
     vectArr_X_down, vectArr_X_up = r * arr_cos_theta @ arr_sin_phi.T, \
@@ -316,27 +336,34 @@ vectArr_Z = np.tile( arr_cos_phi.T, ((precision+1), 1) )
 #REMARK: The vectArr_Z has been created by repeating the line of cos(phi) as many
 #times there are values for the theta angle
 
-
 pdb_id = "6gx6"
-pdbFile = open('./src/../data/' + pdb_id + ".pdb", 'r')
-coord_mon_pdbFile, nb_Calpha = get_C_alpha_coord(pdbFile)
-pdbFile.close()
+thresold_ASA = 20 #Considered accessible if ASA up to thresold
+
 if len(arg_cmd) == 2:
     path_to_naccess_exe = 'naccess'
 else:
     path_to_naccess_exe = arg_cmd[2]
-    
-use_NACCESS(pdb_id, path_to_naccess_exe)
-#Faudrait parser l'output de NACCESS une bonne fois pour toute, pour que ca soit
-#moins lourd a lire => Puis stocker ca dans une variable "content_naccesFile"
 
+dict_CA, nb_accessible_CA, nb_tot_CA = get_acessible_CA(pdb_id, 
+                                              path_to_naccess_exe, 
+                                              thresold_ASA)
+print("NB_CA = ", nb_accessible_CA)
+print("NB_T0T_CA = ", nb_tot_CA)
+pdbFile = open('./src/../data/' + pdb_id + ".pdb", 'r')
+#dict_CA, list_resid = get_coord(dict_CA, nb_accessible_CA, pdbFile)
+pdbFile.close()
+
+
+#print(list_resid)
+#for key in dict_CA.keys():
+#    print(dict_CA[key])
 
 
 #for resid in coord_pdbFile:
 #    print(coord_pdbFile[resid])
 
-centerOfMass = calc_centerOfmass(coord_mon_pdbFile, nb_Calpha)
-transformed_coord = transform_coord(coord_mon_pdbFile, centerOfMass)
+#centerOfMass = calc_centerOfmass(coord_mon_pdbFile, nb_Calpha)
+#transformed_coord = transform_coord(coord_mon_pdbFile, centerOfMass)
 
 
 #fonction(5, transformed_coord[56])
