@@ -174,25 +174,35 @@ def dist_point_plane(point, plane):
     return numer/denom
 
 
-    
-def start_position_plane(unit_vect, coord_pdbFile):
-    """Takes an array containing the coord of a unit vect, calculate the array
-    with the distance between all the C-alpha of the protein and the plane
-    which is orthogonal to the given vector.
-    Return the coordinates (dict) of the point which is the closer AND the 
-    calculated array of distances"""
+#To simplify the syntax, in the next functions, the use of "nb_CA" will refer to
+# "the number of CA which are enough accessible to the solvent"
 
-    #Start point plan, far from the protein:
+    
+def start_position_plane(unit_vect, coord_pdbFile, nb_CA, list_resid):
+    """Takes an array containing the coord of a unit vect.
+    1) Puts the plane orthogonal to the unit vect given as argument, far enough 
+    from the protein (to be completely outside of it)
+    2) Calculates the distances between all the CA of the protein and this plane
+    ( values are stocked in a array of size (nb_accessible_CA, 1) )
+    3) Determine both the closer and the further CA from the given plane, in 
+    order to calculate the number of steps (=nb_slides) needed to cross the whole
+    protein along the given axis.
+    4) Translate the distance values, in order to positionne the plan just under
+    the closer CA
+    4) Returns this nb_slides and the (transformed) array of distances, which 
+    will be used to slide along the axis (function next next)"""
+
+    #Start plane, far from the protein:
     initial_dist = 1000
     initial_plane = np.hstack( (initial_dist*unit_vect, -initial_dist**2) )
-    start_dist_arr = np.zeros((nb_Calpha, 1)) #Dist between each point and the plane
-    
+    #Will contain dist between each point and the plane:
+    start_dist_arr = np.zeros((nb_CA, 1)) 
     
     i = 0 
     for resid in coord_pdbFile.keys():
         start_dist_arr[i, ] = dist_point_plane( coord_pdbFile[resid], \
                                                 initial_plane )
-        resid_list[i] = resid
+        list_resid[i] = resid
         i += 1
 
     dist_closer = np.floor( initial_dist - np.min(start_dist_arr) )
@@ -201,13 +211,13 @@ def start_position_plane(unit_vect, coord_pdbFile):
     
     #We transform the dist array, to adapt to the well positionned plane:
     start_dist_arr -= (initial_dist - dist_closer)
-    nb_slides = dist_closer - dist_further + 15 #OUI je pense
+    nb_slides = int( dist_closer - dist_further + 15 ) #OUI je pense
     
     return ( nb_slides, start_dist_arr )
 
 
 
-def freq_hydrophob(start_dist_arr, content_naccesFile):
+def freq_hydrophob(start_dist_arr, content_naccesFile, nb_CA):
     """Read the dist_arr, in order to find which one are in the current slice.
     Then goes in the NACCESS output file, to know if it is an hydrophobic
     or not
@@ -218,7 +228,7 @@ def freq_hydrophob(start_dist_arr, content_naccesFile):
     list_hydrophob_aa = ["", "", "", "", ""] #All the a  considered as hydrophobic
     dist_arr = start_dist_arr #To avoid modifying the arr in parameter
     
-    for i in range(nb_Calpha):
+    for i in range(nb_CA):
         if -15 <= dist_arr[i, ] <= 0: #For the aa in the slice
             nb_accessible += 1
             #aa = n
@@ -240,7 +250,7 @@ def sliding_slice(nb_slides, start_dist_arr):
     dist_arr = start_dist_arr
     sum_freq_hydrophob = 0
     for r in range(nb_slides):
-        hydroph_arr += freq_hydrophob(dist_arr)
+        sum_freq_hydrophob += freq_hydrophob(dist_arr)
         dist_arr -= 1 #We slide the slice of 1A
         
     return sum_freq_hydrophob/nb_slides
@@ -330,11 +340,6 @@ precision = int(arg_cmd[1])
 arr_cos_theta, arr_sin_theta = generate_sinCos_arr(precision)
 arr_cos_phi, arr_sin_phi = arr_cos_theta, arr_sin_theta
 
-print(arr_cos_theta)
-print("\n ESPACE \n")
-print(arr_sin_theta)
-
-
 #Use of matricial product to calculate each of the x, y and z matrixes
 #of the unit vector dividing the 3D space
 #(necessity to reshape the phi matrixes, to make the product)
@@ -345,23 +350,19 @@ vectArr_Z = np.tile( arr_cos_phi.T, ((precision+1), 1) )
 #REMARK: The vectArr_Z has been created by repeating the line of cos(phi) as many
 #times there are values for the theta angle
 
-#for key in dict_CA_wCoord.keys():
-    #print(key)
-    #print(dict_CA_noCoord[key])
 
-
-#for resid in coord_pdbFile:
-#    print(coord_pdbFile[resid])
-
-#centerOfMass = calc_centerOfmass(coord_mon_pdbFile, nb_Calpha)
-#transformed_coord = transform_coord(coord_mon_pdbFile, centerOfMass)
-
-
-#fonction(5, transformed_coord[56])
 mon_vect = np.array( [vectArr_X[4, 4], vectArr_Y[4, 4], vectArr_Z[4, 4]] )
-#toto, tata = positionning_plane(mon_vect)
+nb_slides, start_dist_arr = start_position_plane(mon_vect, 
+                                                 dict_CA, 
+                                                 nb_accessible_CA,
+                                                 list_resid)
 
-    
+print(start_dist_arr)
+print(nb_slides)
+
+
+nombre = sliding_slice(nb_slides, start_dist_arr)
+print(nombre)
 
 
 
