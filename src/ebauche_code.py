@@ -217,7 +217,7 @@ def start_position_plane(unit_vect, coord_pdbFile, nb_CA, list_resid):
 
 
 
-def freq_hydrophob(start_dist_arr, content_naccesFile, nb_CA):
+def freq_hydrophob(start_dist_arr, nb_CA, dict_CA, list_resid):
     """Read the dist_arr, in order to find which one are in the current slice.
     Then goes in the NACCESS output file, to know if it is an hydrophobic
     or not
@@ -225,21 +225,25 @@ def freq_hydrophob(start_dist_arr, content_naccesFile, nb_CA):
     slice"""
 
     nb_accessible, nb_hydrophob_accessible = 0, 0
-    list_hydrophob_aa = ["", "", "", "", ""] #All the a  considered as hydrophobic
-    dist_arr = start_dist_arr #To avoid modifying the arr in parameter
+    #The  aa considered as hydrophobic in the article:
+    list_hydrophob_aa = ["PHE", "GLY", "ILE", "LEU", 
+                         "MET", "VAL", "TRP", "TYR"] 
     
     for i in range(nb_CA):
-        if -15 <= dist_arr[i, ] <= 0: #For the aa in the slice
+        if -15 <= start_dist_arr[i, ] <= 0: #For the aa in the slice
             nb_accessible += 1
-            #aa = n
+            
+            resid = list_resid[i]
+            aa = dict_CA[resid]["resName"]
+            
             if aa in list_hydrophob_aa:
-                nb_hydroph_accessible += 1
+                nb_hydrophob_accessible += 1
             
     return nb_hydrophob_accessible/nb_accessible
 
 
 
-def sliding_slice(nb_slides, start_dist_arr):
+def sliding_slice(nb_slides, start_dist_arr, nb_CA, dict_CA, list_resid):
     """Takes a slice positionned at its start point, by taking 
     its start_dist_arr. 
     Slides this slice nb_slides times, by decrementing the dist_arr of 1A.
@@ -250,7 +254,11 @@ def sliding_slice(nb_slides, start_dist_arr):
     dist_arr = start_dist_arr
     sum_freq_hydrophob = 0
     for r in range(nb_slides):
-        sum_freq_hydrophob += freq_hydrophob(dist_arr)
+        print( freq_hydrophob(dist_arr, nb_CA, dict_CA, list_resid) )
+        sum_freq_hydrophob += freq_hydrophob(dist_arr, 
+                                             nb_CA, 
+                                             dict_CA, 
+                                             list_resid)
         dist_arr -= 1 #We slide the slice of 1A
         
     return sum_freq_hydrophob/nb_slides
@@ -351,18 +359,22 @@ vectArr_Z = np.tile( arr_cos_phi.T, ((precision+1), 1) )
 #times there are values for the theta angle
 
 
+#TOUT CA, CA DOIT ETRE BOUCLEH, SUR L'ENSEMBLE DES DIRECTIONS:
+
 mon_vect = np.array( [vectArr_X[4, 4], vectArr_Y[4, 4], vectArr_Z[4, 4]] )
 nb_slides, start_dist_arr = start_position_plane(mon_vect, 
                                                  dict_CA, 
                                                  nb_accessible_CA,
                                                  list_resid)
 
-print(start_dist_arr)
-print(nb_slides)
 
 
-nombre = sliding_slice(nb_slides, start_dist_arr)
-print(nombre)
+mean_this_direction = sliding_slice(nb_slides, 
+                       start_dist_arr, 
+                       nb_accessible_CA, 
+                       dict_CA, 
+                       list_resid)
+print(mean_this_direction)
 
 
 
