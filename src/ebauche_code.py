@@ -11,7 +11,7 @@ import os
 def get_acessible_CA(pdb_id, path_to_naccess_exe, thresold_ASA):
     """Takes the pdb id (as a str), runs NACCESS on it (ASA calculation)"""
     
-    pdb_fileName = pdb_id + ".pdb"
+    pdb_fileName = "../data/" + pdb_id + ".pdb"
     p = PDBParser()
     structure = p.get_structure(pdb_id, pdb_fileName)
     model = structure[0]
@@ -20,7 +20,7 @@ def get_acessible_CA(pdb_id, path_to_naccess_exe, thresold_ASA):
     
     dict_CA = {} #Contains all useful info for CA
     nb_accessible_CA = 0
-    nb_tot_CA = 0
+    resid = 0
     
     for line in output_naccess:
         splitted_line = line.split()
@@ -28,20 +28,24 @@ def get_acessible_CA(pdb_id, path_to_naccess_exe, thresold_ASA):
         resName = splitted_line[1]
         
         if type_line == "RES" and len(resName) == 3:
-            nb_tot_CA += 1
+            resid += 1
+            numRes = int( splitted_line[3] )
+            relASA = float(splitted_line[5])
+            chain = splitted_line[2]
             
-            resid = splitted_line[3]
-            rel_ASA = float(splitted_line[5])
-            
-            if rel_ASA >= thresold_ASA:
+            if relASA >= thresold_ASA:
                 nb_accessible_CA += 1
-                dict_CA[resid] = { 'resName': resName, 
-                                    'rel_ASA': rel_ASA }
-                 
-    return (dict_CA, nb_accessible_CA, nb_tot_CA)
+                dict_CA[resid] = { 'resName': resName,
+                                   'chain': chain,
+                                   'numRes': numRes, 
+                                   'relASA': relASA }
+    
+    
+    #The resid correspond here to the total number of CA             
+    return ( dict_CA, nb_accessible_CA, resid )
 
 
-def get_coord(nb_tot_CA, dict_CA, nb_accessible_CA, pdbFile):
+def get_coord(dict_CA, nb_accessible_CA, nb_tot_CA, pdbFile):
     """Get the coordinate of the C-alpha which are accessible to the solvent 
     (i.e. ASA beyond the threesold), from a pdb file (file obj) 
     given as argument. Count also the number of C-alpha"""
@@ -49,28 +53,29 @@ def get_coord(nb_tot_CA, dict_CA, nb_accessible_CA, pdbFile):
     dict_CA_final = dict_CA #To avoid side effects
     
     #To index the resid
-    list_resid = [0] * nb_tot_CA ; i = 0
+    list_resid = [0] * nb_accessible_CA ; i = 0
     #To calculate the center of mass of the protein
-    sum_X, sum_Y, sum_Z = 0, 0, 0 
+    sum_X, sum_Y, sum_Z = 0, 0, 0
     
+    resid = 0 #Problems with resid starting at 3, or chains etc in pdbFile
     for line in pdbFile:
         if line.startswith( "ATOM" ) and line[12:16].strip() == "CA":
-            resid = int( line[22:26].strip() )
+            resid += 1
             X_coord = float( line[30:38].strip() )
             Y_coord = float( line[38:46].strip() )
             Z_coord = float( line[46:54].strip() )
             
             #To calculate the center of mass of the protein:
             sum_X += X_coord ; sum_Y += Y_coord ; sum_Z += Z_coord
-            
-            if resid in dict_CA.keys():
-                list_resid[i] = resid
+
+            if resid in dict_CA.keys(): #If considered as accessible
+                list_resid[i] = resid ; i += 1
                 
                 dict_CA_final[resid]['x'] = X_coord 
                 dict_CA_final[resid]['y'] = Y_coord 
                 dict_CA_final[resid]['z'] = Z_coord  
     
-    
+
     centerOfMass = [ sum_X/nb_tot_CA, sum_Y/nb_tot_CA, sum_Z/nb_tot_CA ] 
     return (dict_CA_final, list_resid, centerOfMass)
 
@@ -134,7 +139,7 @@ def generate_sinCos_arr(precision, angle):
             arr_sin[3*idx_pi_over_2, 0] = -1.0        
             
             
-    #N-E DIAL (will serve as a reference to fill the other dials):
+    #N-E DIAL (will serve as a reference to fill the other dial):
     i=1
     for angle in np.arange(np.pi/precision, np.pi/2 - 1/precision, np.pi/precision):
     #J'ai trouve le "-1/pas" un peu empiriquement => A VOIR...
@@ -142,37 +147,12 @@ def generate_sinCos_arr(precision, angle):
         arr_sin[i, 0] = np.sin(angle)
         i += 1     
     
+    #N-O dial:
     nb_to_calc = i - 1 #Number of values to calculate
+    end = start + nb_to_calc
     
-    
-    #Then deduction of the other dials, based on the N-E one:
-    for dial_idx in range(1, nb_dials): #Starts at 1, cuz NE dial has index 0
-        sign_cos = 1 ; sign_sin = 1 #Initialized at the beginning of each turn
-    
-        #Depending on the parity of the precision, we don't start from the same index
-        if precision%2 == 0:  
-            start = dial_idx * idx_pi_over_2 + 1
-        else:
-            start = dial_idx * i        
-        
-        if dial_idx == 2: #No need to reverse in the S-O dial
-            sign_cos = -1; sign_sin = -1
-            end = start + nb_to_calc
-            arr_cos[start:end, 0] = sign_cos * arr_cos[1:i, 0]
-            arr_sin[start:end, 0] = sign_sin * arr_sin[1:i, 0]        
-        
-        else: #Reversion for the 2 other dials, to reflect trigo circle
-            if dial_idx == 1: #N-O DIAL
-                sign_cos = -1
-
-            elif dial_idx == 3: #S-E DIAL
-                sign_sin = -1
-                if precision%2 != 0: #Particular case when S-E dial and odd precision
-                    start = dial_idx*i - 1  
-        
-            end = start + nb_to_calc
-            arr_cos[start:end, 0] = sign_cos * arr_cos[1:i, 0][::-1]
-            arr_sin[start:end, 0] = sign_sin * arr_sin[1:i, 0][::-1]
+    arr_cos[start:end, 0] = -arr_cos[1:i, 0][::-1]
+    arr_sin[start:end, 0] = arr_sin[1:i, 0][::-1]
     
     return (arr_cos, arr_sin)        
     
@@ -311,13 +291,46 @@ def fonction_pple (r, point):
 
 #MAIN
 
+arg_cmd = sys.argv
+
+
+# 1) We extract the needed data:
+pdb_id = "6b87"
+thresold_ASA = 20 #Considered accessible if ASA up to thresold
+
+if len(arg_cmd) == 2:
+    path_to_naccess_exe = 'naccess'
+else:
+    path_to_naccess_exe = arg_cmd[2]
+
+dict_CA, nb_accessible_CA, nb_tot_CA = get_acessible_CA( pdb_id, 
+                                                         path_to_naccess_exe, 
+                                                         thresold_ASA)
+print("NB_CA_ACCESSIBLE = ", nb_accessible_CA)
+print("NB_CA_TOT = ", nb_tot_CA)
+
+pdbFile = open('../data/' + pdb_id + ".pdb", 'r')
+dict_CA, list_resid, centerOfMass = get_coord( dict_CA, 
+                                               nb_accessible_CA, 
+                                               nb_tot_CA,
+                                               pdbFile)
+pdbFile.close()
+print(centerOfMass)
+print(dict_CA[1])
+
+
+# 2) We transform the coordinates to set the center of mass as the origin:
+dict_CA = transform_coord(dict_CA, centerOfMass)
+print(dict_CA[1])
+
+
+# 3) We generate the  arrays corresponding respecsinCos_arr
 #Formulas, from polar to cartesian:
 #x = r * sin(phi) * cos(theta)
 #y = r * sin(phi) * sin(theta)
 #z = r * cos(phi)
 
 r = 3
-arg_cmd = sys.argv
 precision = int(arg_cmd[1])
 
 
@@ -336,27 +349,9 @@ vectArr_Z = np.tile( arr_cos_phi.T, ((precision+1), 1) )
 #REMARK: The vectArr_Z has been created by repeating the line of cos(phi) as many
 #times there are values for the theta angle
 
-pdb_id = "6gx6"
-thresold_ASA = 20 #Considered accessible if ASA up to thresold
-
-if len(arg_cmd) == 2:
-    path_to_naccess_exe = 'naccess'
-else:
-    path_to_naccess_exe = arg_cmd[2]
-
-dict_CA, nb_accessible_CA, nb_tot_CA = get_acessible_CA(pdb_id, 
-                                              path_to_naccess_exe, 
-                                              thresold_ASA)
-print("NB_CA = ", nb_accessible_CA)
-print("NB_T0T_CA = ", nb_tot_CA)
-pdbFile = open('./src/../data/' + pdb_id + ".pdb", 'r')
-#dict_CA, list_resid = get_coord(dict_CA, nb_accessible_CA, pdbFile)
-pdbFile.close()
-
-
-#print(list_resid)
-#for key in dict_CA.keys():
-#    print(dict_CA[key])
+#for key in dict_CA_wCoord.keys():
+    #print(key)
+    #print(dict_CA_noCoord[key])
 
 
 #for resid in coord_pdbFile:
