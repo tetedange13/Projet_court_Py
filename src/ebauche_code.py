@@ -45,12 +45,14 @@ def get_acessible_CA(pdb_id, path_to_naccess_exe, thresold_ASA):
     return ( dict_CA, nb_accessible_CA, resid )
 
 
-def get_coord(dict_CA, nb_accessible_CA, nb_tot_CA, pdbFile):
+def get_coord(dict_CA, nb_accessible_CA, nb_tot_CA, pdbFile, pdb_id):
     """Get the coordinate of the C-alpha which are accessible to the solvent 
     (i.e. ASA beyond the threesold), from a pdb file (file obj) 
     given as argument. Count also the number of C-alpha"""
     
     dict_CA_final = dict_CA #To avoid side effects
+    
+    outFile = open("../results/" + pdb_id + '_out.pdb', 'w')
     
     #To index the resid
     list_resid = [0] * nb_accessible_CA ; i = 0
@@ -59,23 +61,27 @@ def get_coord(dict_CA, nb_accessible_CA, nb_tot_CA, pdbFile):
     
     resid = 0 #Problems with resid starting at 3, or chains etc in pdbFile
     for line in pdbFile:
-        if line.startswith( "ATOM" ) and line[12:16].strip() == "CA":
-            resid += 1
-            X_coord = float( line[30:38].strip() )
-            Y_coord = float( line[38:46].strip() )
-            Z_coord = float( line[46:54].strip() )
-            
-            #To calculate the center of mass of the protein:
-            sum_X += X_coord ; sum_Y += Y_coord ; sum_Z += Z_coord
-
-            if resid in dict_CA.keys(): #If considered as accessible
-                list_resid[i] = resid ; i += 1
+        if line.startswith( "ATOM" ):
+            outFile.write(line)
+        
+            if line[12:16].strip() == "CA":
+                resid += 1
+                X_coord = float( line[30:38].strip() )
+                Y_coord = float( line[38:46].strip() )
+                Z_coord = float( line[46:54].strip() )
                 
-                dict_CA_final[resid]['x'] = X_coord 
-                dict_CA_final[resid]['y'] = Y_coord 
-                dict_CA_final[resid]['z'] = Z_coord  
-    
+                #To calculate the center of mass of the protein:
+                sum_X += X_coord ; sum_Y += Y_coord ; sum_Z += Z_coord
 
+                if resid in dict_CA.keys(): #If considered as accessible
+                    list_resid[i] = resid ; i += 1
+                    
+                    dict_CA_final[resid]['x'] = X_coord 
+                    dict_CA_final[resid]['y'] = Y_coord 
+                    dict_CA_final[resid]['z'] = Z_coord  
+    
+    outFile.write("MASTER\n")
+    outFile.close()
     centerOfMass = [ sum_X/nb_tot_CA, sum_Y/nb_tot_CA, sum_Z/nb_tot_CA ] 
     return (dict_CA_final, list_resid, centerOfMass)
 
@@ -323,11 +329,85 @@ def improve_mb_position(best_direction, dict_CA, nb_CA, list_resid, best_start_d
 
 
 
-def calc_coord_plane(best_direction):
+def draw_best_axis(nb_points, best_direction, centerOfMass, outFile):
+    for r in range(-nb_points, nb_points):
+        point_to_write = r * best_direction + centerOfMass
+        outFile.write( good_str.format( "HETATM", 
+                                        r, 
+                                        "N",
+                                        "DUM",
+                                        r,
+                                        point_to_write[0],
+                                        point_to_write[1],
+                                        point_to_write[2] )) 
+
+
+
+
+def calc_coord_plane(best_direction, dist_best_plane, outFile, centerOfMass,
+                     idx_best_angles, precision, arr_cos, arr_sin):
     """To be able to have a nice PyMol output of our plan, we need to determine
     the coordinates of the 4 corners of our plane 
     (represented as a 3D rectangle)"""
-
+    
+    #Ici, on va utiliser la formule suivante:
+    # cos(phi + pi/4) = R / H
+    # <==> H = R / cos(phi + pi/4)
+    
+    #x = r * sin(phi) * cos(theta)
+    #y = r * sin(phi) * sin(theta)
+    #z = r * cos(phi)
+    
+    #We transform the coordinates in the other side (adding the center of mass):
+    middle_point = dist_best_plane * best_direction + centerOfMass
+    idx_theta, idx_phi = idx_best_angles
+    theta, phi = idx_best_angles * np.pi / precision
+    #print(theta, phi)
+    
+    mon_angle = 3 * np.pi / 7
+    
+    H_left = dist_best_plane / np.cos(theta + mon_angle)
+    H_right = dist_best_plane / np.cos(theta - mon_angle)
+    
+    X_right = H_right * arr_sin[idx_phi] * np.cos(theta + mon_angle)
+    Y_right = H_right * arr_sin[idx_phi] * np.sin(theta + mon_angle)
+    Z_right = H_right * arr_cos[idx_phi]
+    right_point = np.array( [X_right, Y_right, Z_right] ) + centerOfMass
+    
+    X_left = H_left * arr_sin[idx_phi] * np.cos(theta - mon_angle)
+    Y_left = H_left * arr_sin[idx_phi] * np.sin(theta - mon_angle)
+    Z_left = H_left * arr_cos[idx_phi]
+    left_point = np.array( [X_left, Y_left, Z_left] ) + centerOfMass
+    #print(left_point, right_point, middle_point)
+    
+    print(middle_point)
+    good_str = "{:6s}{:5d} {:^4s} {:3s}  {:4d}    {:8.3f}{:8.3f}""{:8.3f}\n"
+    
+    #Draw the axis orthogonal to the membrane
+    #draw_best_axis(50, best_direction, centerOfMass, outFile)
+    i = 0
+    for point_plane in [ left_point, middle_point, right_point ]:
+        print(point_plane, "sds\n")
+        i += 1
+        outFile.write( good_str.format("HETATM", 
+                                          i, 
+                                          "N",
+                                          "DUM",
+                                          i,
+                                          point_plane[0],
+                                          point_plane[1],
+                                          point_plane[2] )) 
+    
+    
+    
+    
+    
+    
+    
+    
+    #HETATM 2548  N   DUM  2548     -16.000  -6.000 -15.700
+    #"{:6s}{:5d} {:^4s}{:1s}{:3s} {:1s}{:4d}{:1s}   {:8.3f}{:8.3f}{:8.3f}{:6.2f}{:6.2f}          {:>2s}{:2s}".format(...)
+    
     return
 
    
@@ -355,7 +435,8 @@ pdbFile = open('../data/' + pdb_id + ".pdb", 'r')
 dict_CA, list_resid, centerOfMass = get_coord( dict_CA, 
                                                nb_accessible_CA, 
                                                nb_tot_CA,
-                                               pdbFile)
+                                               pdbFile,
+                                               pdb_id)
 pdbFile.close()
 
 
@@ -423,7 +504,8 @@ for i in range(size_arr):
 idx_max_flat = np.argmax(arr_mean_freq)
 idx_max_goodShape = np.unravel_index( idx_max_flat, (size_arr, size_arr) )
 idx_theta = idx_max_goodShape[0] ; idx_phi = idx_max_goodShape[1]
-print(idx_theta, idx_phi)
+idx_best_angles = np.array( [idx_theta, idx_phi], dtype=int )
+
 best_direction = arr_unit_vect[:, idx_theta, idx_phi]
 theta = str(idx_theta) + 'pi/' + str(precision)
 phi = str(idx_phi) + 'pi/' + str(precision)
@@ -442,6 +524,22 @@ dist_best_plane = improve_mb_position( ma_direction,
 
 
 print(dist_best_plane)
+
+
+# 6) Manage the output:
+
+outFile = open("../results/" + pdb_id + "_out.pdb", 'a')
+
+calc_coord_plane( best_direction, 
+                dist_best_plane, 
+                outFile, 
+                centerOfMass, 
+                idx_best_angles,
+                precision,
+                arr_cos_phi, 
+                arr_sin_phi )
+
+outFile.close()
 
 
 
