@@ -175,11 +175,11 @@ def dist_point_plane(point, plane):
     return numer/denom
 
 
-#To simplify the syntax, in the next functions, the use of "nb_CA" will refer to
-# "the number of CA which are enough accessible to the solvent"
+#To simplify the syntax, in the next functions, the use of "CA" in any variable
+#will refer to "all the CA which are enough accessible to the solvent"
 
     
-def start_position_plane(unit_vect, coord_pdbFile, nb_CA, list_resid):
+def start_position_plane(unit_vect, dict_CA, nb_CA, list_resid):
     """Takes an array containing the coord of a unit vect.
     1) Puts the plane orthogonal to the unit vect given as argument, far enough 
     from the protein (to be completely outside of it)
@@ -198,28 +198,30 @@ def start_position_plane(unit_vect, coord_pdbFile, nb_CA, list_resid):
     initial_plane = np.hstack( (initial_dist*unit_vect, -initial_dist**2) )
 
     #Will contain dist between each point and the plane:
-    start_dist_arr = np.zeros((nb_CA, 1)) 
+    start_dist_points_arr = np.zeros((nb_CA, 1)) 
     
     i = 0 
-    for resid in coord_pdbFile.keys():
-        start_dist_arr[i, ] = dist_point_plane( coord_pdbFile[resid], \
+    for resid in dict_CA.keys():
+        start_dist_points_arr[i, ] = dist_point_plane( dict_CA[resid], \
                                                 initial_plane )
         list_resid[i] = resid
         i += 1
 
-    dist_closer = np.floor( initial_dist - np.min(start_dist_arr) )
-    dist_further = np.floor( initial_dist - np.max(start_dist_arr) ) 
+    start_dist_plane = np.floor( initial_dist - np.min(start_dist_points_arr) )
+    end_dist_plane = np.floor( initial_dist - np.max(start_dist_points_arr) ) 
     #=> Que faire si la dist entre le plus pres et le plus loi es trop petite ??
     
     #We transform the dist array, to adapt to the well positionned plane:
-    start_dist_arr -= (initial_dist - dist_closer)
-    nb_slides = int( dist_closer - dist_further + 15 ) #OUI je pense
+    start_dist_points_arr -= (initial_dist - start_dist_plane)
+    nb_slides = int( start_dist_plane - end_dist_plane + 15 ) #OUI je pense
     
-    return ( nb_slides, start_dist_arr )
+    
+    #For further improval, we need the start dist for the plan (last arg):
+    return ( nb_slides, start_dist_points_arr, start_dist_plane )
 
 
 
-def freq_hydrophob(start_dist_arr, nb_CA, dict_CA, list_resid):
+def freq_hydrophob(start_dist_points_arr, nb_CA, dict_CA, list_resid):
     """Read the dist_arr, in order to find which one are in the current slice.
     Then goes in the NACCESS output file, to know if it is an hydrophobic
     or not
@@ -232,7 +234,7 @@ def freq_hydrophob(start_dist_arr, nb_CA, dict_CA, list_resid):
                          "MET", "VAL", "TRP", "TYR"] 
     
     for i in range(nb_CA):
-        if -15 <= start_dist_arr[i, ] <= 0: #For the aa in the slice
+        if -15 <= start_dist_points_arr[i, ] <= 0: #For the aa in the slice
             nb_accessible += 1
             
             resid = list_resid[i]
@@ -245,9 +247,9 @@ def freq_hydrophob(start_dist_arr, nb_CA, dict_CA, list_resid):
 
 
 
-def sliding_slice(nb_slides, start_dist_arr, nb_CA, dict_CA, list_resid):
+def sliding_slice(nb_slides, start_dist_points_arr, nb_CA, dict_CA, list_resid):
     """Takes a slice positionned at its start point, by taking 
-    its start_dist_arr. 
+    its start_dist_points_arr. 
     Slides this slice nb_slides times, by decrementing the dist_arr of 1A.
     At each step, the frequency of hydrophobic aa among the accessible aa is
     calculated, in order to have the mean of the frequency of hydrophobic aa
@@ -259,28 +261,73 @@ def sliding_slice(nb_slides, start_dist_arr, nb_CA, dict_CA, list_resid):
     to slide one last time along this direction, in order to well position the
     membrane"""
 
-    dist_arr = start_dist_arr
+    dist_arr = start_dist_points_arr
     sum_freq_hydrophob = 0
+    
     for r in range(nb_slides):
-        sum_freq_hydrophob += freq_hydrophob(dist_arr, 
-                                             nb_CA, 
-                                             dict_CA, 
-                                             list_resid)
+        sum_freq_hydrophob += freq_hydrophob( dist_arr, 
+                                              nb_CA, 
+                                              dict_CA, 
+                                              list_resid )
         dist_arr -= 1 #We slide the slice of 1A
         
     return sum_freq_hydrophob/nb_slides
          
 
 
-def improve_mb_position(direction_the_mb):
+def dist_point_origin(point):
+    """Calculates the distance between a point (given by its coordinates inside
+    a dict) and the origin of the system"""
+    
+    arr_point = dict_to_arr(point)
+    
+    return np.sqrt( arr_point @ arr_point.T )
+
+
+
+def improve_mb_position(best_direction, dict_CA, nb_CA, list_resid, best_start_dist_plane):
+    #Je l'ai un peu optimisée, pour éviter de stocker en memoire une matrice de
+    #freq, que je dois ensuite parcourir pour trouver le max avec np.argmax()
+    #Par contre, le repositionnement du plan au debut, il est pas tres 
+    #optimal, puisque que tu dois recalculer la dist entre le plan et tous les 
+    #points...
+
     """
     1) Slides along the given direction, in order to find the position which has
     the best value of freq_hydrophob
     2) Makes the membrane grows on each side (0.1 by 0.1A), while this increases
     the freq_hydrophob inside the slice, in order to really to find the optimal
     thickness of the membrane"""
-
     
+    nb_slides, start_dist_points_arr = start_position_plane( best_direction, 
+                                                             dict_CA, 
+                                                             nb_CA, 
+                                                             list_resid ) [0:2]
+    
+    dist_arr = start_dist_points_arr
+    
+    current_max_freq = freq_hydrophob(dist_arr, nb_CA, dict_CA, list_resid)
+    dist_arr -= 1 ; idx_max_freq = 0
+    #print(current_max_freq)
+    for r in range(1, nb_slides):
+        new_freq = freq_hydrophob(dist_arr, nb_CA, dict_CA, list_resid)
+        #print(new_freq)
+        if new_freq > current_max_freq:
+            current_max_freq = new_freq
+            idx_max_freq = r
+            
+        dist_arr -= 1 #We slide the slice of 1A
+    
+        
+    return best_start_dist_plane - idx_max_freq
+
+
+
+def calc_coord_plane(best_direction):
+    """To be able to have a nice PyMol output of our plan, we need to determine
+    the coordinates of the 4 corners of our plane 
+    (represented as a 3D rectangle)"""
+
     return
 
    
@@ -316,7 +363,7 @@ pdbFile.close()
 dict_CA = transform_coord(dict_CA, centerOfMass)
 
 
-# 3) We generate the  arrays corresponding respecsinCos_arr
+# 3) We generate the  arrays:
 #Formulas, from polar to cartesian:
 #x = r * sin(phi) * cos(theta)
 #y = r * sin(phi) * sin(theta)
@@ -346,38 +393,55 @@ arr_unit_vect[1, :, :] = vectArr_Y
 arr_unit_vect[2, :, :] = vectArr_Z
 
 
-#TOUT CA, CA DOIT ETRE BOUCLEH, SUR L'ENSEMBLE DES DIRECTIONS:
+# 4) Loop To calculate the mean freq_hydrophob on all the directions:
 arr_mean_freq = np.zeros( (size_arr, size_arr) )
+start_dist_plane_arr = np.zeros( (size_arr, size_arr) , dtype = int)
 
 for i in range(size_arr):
     for j in range(size_arr):
         unit_vect = arr_unit_vect[:, i, j]
             
-        #1) We position the plan well:
-        nb_slides, start_dist_arr = start_position_plane(unit_vect, 
-                                                             dict_CA, 
-                                                             nb_accessible_CA,
-                                                             list_resid)
-        #2) We slide along the current direction    
+        #4-1) We position the plan well:
+        tuple_returned = start_position_plane( unit_vect, 
+                                               dict_CA, 
+                                               nb_accessible_CA,
+                                               list_resid )
+        nb_slides, start_dist_points_arr, start_dist_plane = tuple_returned
+        start_dist_plane_arr[i, j] = start_dist_plane
+        
+        #4-2) We slide along the current direction:   
         arr_mean_freq[i, j] = sliding_slice( nb_slides, 
-                                             start_dist_arr, 
+                                             start_dist_points_arr, 
                                              nb_accessible_CA, 
                                              dict_CA, 
                                              list_resid ) 
 
 
+
+# 5) Determination of the indexes of this maximum value 
+#inside the arr_mean_freq:
 idx_max_flat = np.argmax(arr_mean_freq)
-idx_max_good_shape = np.unravel_index( idx_max_flat, (size_arr, size_arr) )
-idx_theta = idx_max_good_shape[0] ; idx_phi = idx_max_good_shape[1]
+idx_max_goodShape = np.unravel_index( idx_max_flat, (size_arr, size_arr) )
+idx_theta = idx_max_goodShape[0] ; idx_phi = idx_max_goodShape[1]
 print(idx_theta, idx_phi)
-best_plane = arr_unit_vect[:, idx_theta, idx_phi]
+best_direction = arr_unit_vect[:, idx_theta, idx_phi]
 theta = str(idx_theta) + 'pi/' + str(precision)
 phi = str(idx_phi) + 'pi/' + str(precision)
 print("THETA = ", theta, " ; ", "PHI = ", phi)
 
 
-print(best_plane)
+best_start_dist_plane = start_dist_plane_arr[idx_theta, idx_phi]
 
+ma_direction = arr_unit_vect[:, 3, 4]
+print('\n ESPACE \n')
+dist_best_plane = improve_mb_position( ma_direction, 
+                                       dict_CA, 
+                                       nb_accessible_CA, 
+                                       list_resid,
+                                       best_start_dist_plane )
+
+
+print(dist_best_plane)
 
 
 
