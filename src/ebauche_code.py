@@ -109,9 +109,10 @@ def generate_sinCos_arr(precision):
     
     #We 1st disinguish the cases where we have to deal with theta (from 0 to 2pi)
     #Or phi (from à to pi):
-   
-    arr_cos = np.zeros((precision+1, 1), dtype=float)
-    arr_sin = np.zeros((precision+1, 1), dtype=float)
+    
+    size_arr = precision+1
+    arr_cos = np.zeros((size_arr, 1), dtype=float)
+    arr_sin = np.zeros((size_arr, 1), dtype=float)
     
 
     #We start with filling with evident values (not zero) of cos et sin:
@@ -121,7 +122,7 @@ def generate_sinCos_arr(precision):
     arr_cos[precision, 0] = -1.0
     
     if precision%2 == 0: #If the precision is even, there is also pi/2
-        idx_pi_over_2 = int( (precision+1)/2 )
+        idx_pi_over_2 = int( size_arr/2 )
         #En pi/2:
         arr_sin[idx_pi_over_2, 0 ] = 1.0 
             
@@ -187,7 +188,7 @@ def start_position_plane(unit_vect, coord_pdbFile, nb_CA, list_resid):
     3) Determine both the closer and the further CA from the given plane, in 
     order to calculate the number of steps (=nb_slides) needed to cross the whole
     protein along the given axis.
-    4) Translate the distance values, in order to positionne the plan just under
+    4) Translate the distance values, in order to position the plan just under
     the closer CA
     4) Returns this nb_slides and the (transformed) array of distances, which 
     will be used to slide along the axis (function next next)"""
@@ -195,6 +196,7 @@ def start_position_plane(unit_vect, coord_pdbFile, nb_CA, list_resid):
     #Start plane, far from the protein:
     initial_dist = 1000
     initial_plane = np.hstack( (initial_dist*unit_vect, -initial_dist**2) )
+
     #Will contain dist between each point and the plane:
     start_dist_arr = np.zeros((nb_CA, 1)) 
     
@@ -249,12 +251,17 @@ def sliding_slice(nb_slides, start_dist_arr, nb_CA, dict_CA, list_resid):
     Slides this slice nb_slides times, by decrementing the dist_arr of 1A.
     At each step, the frequency of hydrophobic aa among the accessible aa is
     calculated, in order to have the mean of the frequency of hydrophobic aa
-    along the current direction"""
+    along the current direction
+    
+    REMARK: The different values of frequency along a given direct are not kept
+    individually, in order to reduce the cost in memory.
+    That is why, after found the good normal vect to the membrane, we will have 
+    to slide one last time along this direction, in order to well position the
+    membrane"""
 
     dist_arr = start_dist_arr
     sum_freq_hydrophob = 0
     for r in range(nb_slides):
-        print( freq_hydrophob(dist_arr, nb_CA, dict_CA, list_resid) )
         sum_freq_hydrophob += freq_hydrophob(dist_arr, 
                                              nb_CA, 
                                              dict_CA, 
@@ -262,45 +269,21 @@ def sliding_slice(nb_slides, start_dist_arr, nb_CA, dict_CA, list_resid):
         dist_arr -= 1 #We slide the slice of 1A
         
     return sum_freq_hydrophob/nb_slides
-    
-
-
-def is_in_slice(point, planeDown, planeUp):
-    """Determine if a given C-alpha (aka point with (x;y;z) coord into a dict) 
-    is inside a given slice of 1A wide (between planeI and planeI_plus1)"""
-    
-    if dist_point_plane(point, planeDown) < 1 \
-                                and dist_point_plane(point, planeUp) < 1:
-        return 1    
-    
-    else:
-        return 0                                
-    
-    
-   
-def fonction_pple (r, point):
-    size_arr_theta = np.shape(arr_cos_theta)[0]  
-    vectArr_X_down, vectArr_X_up = r * arr_cos_theta @ arr_sin_phi.T, \
-                           (r+1) * arr_cos_theta @ arr_sin_phi.T
-    vectArr_Y_down, vectArr_Y_up = r * arr_sin_theta @ arr_sin_phi.T, \
-                           (r+1) * arr_sin_theta @ arr_sin_phi.T
-    vectArr_Z_down, vectArr_Z_up = r * np.tile( arr_cos_phi.T, (size_arr_theta, 1) ), \
-                           (r+1) * np.tile( arr_cos_phi.T, (size_arr_theta, 1) )  
-    
-    taille_i, taille_j = np.shape(vectArr_X_down)
-    for i in range(precision + 1):
-        for j in range(precision + 1):
-            planeDown = np.array( [vectArr_X_down[i,j],
-                                   vectArr_Y_down[i,j],
-                                   vectArr_Z_down[i,j],
-                                   -r**2 ] )
-            planeUp = np.array( [vectArr_X_up[i,j],
-                                   vectArr_Y_up[i,j],
-                                   vectArr_Z_up[i,j],
-                                   -(r+1)**2 ] )
-            print( is_in_slice(point, planeDown, planeUp) )
          
 
+
+def improve_mb_position(direction_the_mb):
+    """
+    1) Slides along the given direction, in order to find the position which has
+    the best value of freq_hydrophob
+    2) Makes the membrane grows on each side (0.1 by 0.1A), while this increases
+    the freq_hydrophob inside the slice, in order to really to find the optimal
+    thickness of the membrane"""
+
+    
+    return
+
+   
 
 
 #MAIN
@@ -320,8 +303,6 @@ else:
 dict_CA, nb_accessible_CA, nb_tot_CA = get_acessible_CA( pdb_id, 
                                                          path_to_naccess_exe, 
                                                          thresold_ASA)
-print("NB_CA_ACCESSIBLE = ", nb_accessible_CA)
-print("NB_CA_TOT = ", nb_tot_CA)
 
 pdbFile = open('../data/' + pdb_id + ".pdb", 'r')
 dict_CA, list_resid, centerOfMass = get_coord( dict_CA, 
@@ -343,7 +324,6 @@ dict_CA = transform_coord(dict_CA, centerOfMass)
 
 precision = int(arg_cmd[1])
 
-
 #These arrays need to be created only one:
 arr_cos_theta, arr_sin_theta = generate_sinCos_arr(precision)
 arr_cos_phi, arr_sin_phi = arr_cos_theta, arr_sin_theta
@@ -351,30 +331,52 @@ arr_cos_phi, arr_sin_phi = arr_cos_theta, arr_sin_theta
 #Use of matricial product to calculate each of the x, y and z matrixes
 #of the unit vector dividing the 3D space
 #(necessity to reshape the phi matrixes, to make the product)
+size_arr = precision + 1
 vectArr_X = arr_cos_theta @ arr_sin_phi.T
 vectArr_Y = arr_sin_theta @ arr_sin_phi.T
-vectArr_Z = np.tile( arr_cos_phi.T, ((precision+1), 1) )
+vectArr_Z = np.tile( arr_cos_phi.T, (size_arr, 1) )
 
 #REMARK: The vectArr_Z has been created by repeating the line of cos(phi) as many
 #times there are values for the theta angle
 
+#We merge the 3 arrays in a single one, to simplify its passing as an argument: 
+arr_unit_vect = np.zeros( (3, size_arr, size_arr), dtype=float )
+arr_unit_vect[0, :, :] = vectArr_X
+arr_unit_vect[1, :, :] = vectArr_Y
+arr_unit_vect[2, :, :] = vectArr_Z
+
 
 #TOUT CA, CA DOIT ETRE BOUCLEH, SUR L'ENSEMBLE DES DIRECTIONS:
+arr_mean_freq = np.zeros( (size_arr, size_arr) )
 
-mon_vect = np.array( [vectArr_X[4, 4], vectArr_Y[4, 4], vectArr_Z[4, 4]] )
-nb_slides, start_dist_arr = start_position_plane(mon_vect, 
-                                                 dict_CA, 
-                                                 nb_accessible_CA,
-                                                 list_resid)
+for i in range(size_arr):
+    for j in range(size_arr):
+        unit_vect = arr_unit_vect[:, i, j]
+            
+        #1) We position the plan well:
+        nb_slides, start_dist_arr = start_position_plane(unit_vect, 
+                                                             dict_CA, 
+                                                             nb_accessible_CA,
+                                                             list_resid)
+        #2) We slide along the current direction    
+        arr_mean_freq[i, j] = sliding_slice( nb_slides, 
+                                             start_dist_arr, 
+                                             nb_accessible_CA, 
+                                             dict_CA, 
+                                             list_resid ) 
 
 
+idx_max_flat = np.argmax(arr_mean_freq)
+idx_max_good_shape = np.unravel_index( idx_max_flat, (size_arr, size_arr) )
+idx_theta = idx_max_good_shape[0] ; idx_phi = idx_max_good_shape[1]
+print(idx_theta, idx_phi)
+best_plane = arr_unit_vect[:, idx_theta, idx_phi]
+theta = str(idx_theta) + 'pi/' + str(precision)
+phi = str(idx_phi) + 'pi/' + str(precision)
+print("THETA = ", theta, " ; ", "PHI = ", phi)
 
-mean_this_direction = sliding_slice(nb_slides, 
-                       start_dist_arr, 
-                       nb_accessible_CA, 
-                       dict_CA, 
-                       list_resid)
-print(mean_this_direction)
+
+print(best_plane)
 
 
 
