@@ -5,22 +5,23 @@ import sys
 from Bio.PDB.NACCESS import run_naccess
 from Bio.PDB import PDBParser 
 import os
+import time
 
 
 
 def get_acessible_CA(pdb_id, path_to_naccess_exe, thresold_ASA):
     """Takes the pdb id (as a str), runs NACCESS on it (ASA calculation)"""
     
-    pdb_fileName = "../data/" + pdb_id + ".pdb"
-    p = PDBParser()
-    structure = p.get_structure(pdb_id, pdb_fileName)
-    model = structure[0]
-    output_naccess = run_naccess(model, pdb_fileName, 
-                                 naccess = path_to_naccess_exe)[0]
+    #pdb_fileName = "../data/" + pdb_id + ".pdb"
+    #p = PDBParser()
+    #structure = p.get_structure(pdb_id, pdb_fileName)
+    #model = structure[0]
+    #output_naccess = run_naccess(model, pdb_fileName, 
+    #                             naccess = path_to_naccess_exe)[0]
     
-    #naccessFile = open("../data/6b87.rsa", 'r')
-    #output_naccess = naccessFile.readlines()
-    #naccessFile.close()
+    naccessFile = open("../data/6b87.rsa", 'r')
+    output_naccess = naccessFile.readlines()
+    naccessFile.close()
      
     dict_CA = {} #Contains all useful info for CA
     nb_accessible_CA = 0
@@ -222,7 +223,7 @@ def start_position_plane(unit_vect, dict_CA, nb_CA, list_resid):
     #We transform the dist array, to adapt to the well positionned plane:
     start_dist_points_arr -= (initial_dist - start_dist_plane)
     nb_slides = int( start_dist_plane - end_dist_plane + 15 ) #OUI je pense
-    
+
     
     #For further improval, we need the start dist for the plan (last arg):
     return ( nb_slides, start_dist_points_arr, start_dist_plane )
@@ -271,13 +272,14 @@ def sliding_slice(nb_slides, start_dist_points_arr, nb_CA, dict_CA, list_resid):
 
     dist_arr = start_dist_points_arr
     sum_freq_hydrophob = 0
+    step_slides = 5
     
-    for r in range(nb_slides):
+    for r in range(nb_slides, step_slides):
         sum_freq_hydrophob += freq_hydrophob( dist_arr, 
                                               nb_CA, 
                                               dict_CA, 
                                               list_resid )
-        dist_arr -= 1 #We slide the slice of 1A
+        dist_arr -= step_slides #We slide the slice of 1A
         
     return sum_freq_hydrophob/nb_slides
          
@@ -320,7 +322,7 @@ def improve_mb_position(best_direction, dict_CA, nb_CA,
 
     for r in range(1, nb_slides):
         new_freq = freq_hydrophob(dist_arr, nb_CA, dict_CA, list_resid)
-
+      
         if new_freq > current_max_freq:
             current_max_freq = new_freq
             idx_max_freq = r
@@ -371,25 +373,25 @@ def calc_coord_plane(best_direction, dist_best_plane, outFile, centerOfMass,
     theta, phi = idx_best_angles * np.pi / precision
     mon_angle = np.pi / 3
 
-    H = dist_best_plane / np.cos(theta + mon_angle)
+    H = dist_best_plane / np.cos(phi + mon_angle)
     
-    X_east = H * np.sin(phi - mon_angle) * np.cos(theta - mon_angle)
-    Y_east = H * np.sin(phi - mon_angle) * np.sin(theta - mon_angle)
-    Z_east = H * np.sin(phi - mon_angle)
+    X_east = H * np.sin(phi + mon_angle) * np.cos(theta)
+    Y_east = H * np.sin(phi + mon_angle) * np.sin(theta)
+    Z_east = H * np.sin(phi + mon_angle)
     east_point = np.array( [X_east, Y_east, Z_east] ) + centerOfMass
     
-    X_west = H * np.sin(phi - mon_angle) * np.cos(theta + mon_angle)
-    Y_west = H * np.sin(phi - mon_angle) * np.sin(theta + mon_angle)
-    Z_west = H * np.sin(phi - mon_angle)
-    west_point = np.array( [X_west, Y_west, Z_west] ) + centerOfMass
-    
-    X_north = H * np.sin(phi + mon_angle) * np.cos(theta + mon_angle)
-    Y_north = H * np.sin(phi + mon_angle) * np.sin(theta + mon_angle)
+    X_north = H * np.sin(phi + mon_angle) * np.cos(theta + np.pi/2)
+    Y_north = H * np.sin(phi + mon_angle) * np.sin(theta + np.pi/2)
     Z_north = H * np.sin(phi + mon_angle)
-    north_point = np.array( [X_north, Y_north, Z_north] ) + centerOfMass
+    north_point = np.array( [X_north, Y_north, Z_north] ) + centerOfMass  
     
-    X_south = H * np.sin(phi + mon_angle) * np.cos(theta - mon_angle)
-    Y_south = H * np.sin(phi + mon_angle) * np.sin(theta - mon_angle)
+    X_west = H * np.sin(phi + mon_angle) * np.cos(theta + np.pi)
+    Y_west = H * np.sin(phi + mon_angle) * np.sin(theta + np.pi)
+    Z_west = H * np.sin(phi + mon_angle)
+    west_point = np.array( [X_west, Y_west, Z_west] ) + centerOfMass
+      
+    X_south = H * np.sin(phi + mon_angle) * np.cos(theta + 3*np.pi/2)
+    Y_south = H * np.sin(phi + mon_angle) * np.sin(theta + 3*np.pi/2)
     Z_south = H * np.sin(phi + mon_angle)
     south_point = np.array( [X_south, Y_south, Z_south] ) + centerOfMass
         
@@ -398,9 +400,10 @@ def calc_coord_plane(best_direction, dist_best_plane, outFile, centerOfMass,
     well_formated = "{:6s}{:5d} {:^4s} {:3s}  {:4d}    {:8.3f}{:8.3f}{:8.3f}\n"
     
     #Draw the axis orthogonal to the membrane
-    draw_axis(50, best_direction, centerOfMass, outFile, well_formated)
+    #draw_axis(50, best_direction, centerOfMass, outFile, well_formated)
     i = 0
-    for point_plane in ( east_point, north_point, south_point, west_point ):
+    for point_plane in ( middle_point, north_point, south_point,
+                         west_point, east_point ):
         #print(point_plane, "sds\n")
         i += 1
         outFile.write( well_formated.format("HETATM", 
@@ -428,6 +431,8 @@ def calc_coord_plane(best_direction, dist_best_plane, outFile, centerOfMass,
 
 
 #MAIN
+
+start_time = time.time()
 
 arg_cmd = sys.argv
 
@@ -492,6 +497,7 @@ arr_unit_vect[2, :, :] = vectArr_Z
 # 4) Loop To calculate the mean freq_hydrophob on all the directions:
 arr_mean_freq = np.zeros( (size_arr, size_arr) )
 start_dist_plane_arr = np.zeros( (size_arr, size_arr) , dtype = int)
+arr_nb_slides = np.zeros( (size_arr, size_arr) , dtype = int)
 
 for i in range(size_arr):
     for j in range(size_arr):
@@ -504,6 +510,7 @@ for i in range(size_arr):
                                                list_resid )
         nb_slides, start_dist_points_arr, start_dist_plane = tuple_returned
         start_dist_plane_arr[i, j] = start_dist_plane
+        arr_nb_slides[i, j] = nb_slides
         
         #4-2) We slide along the current direction:   
         arr_mean_freq[i, j] = sliding_slice( nb_slides, 
@@ -512,7 +519,7 @@ for i in range(size_arr):
                                              dict_CA, 
                                              list_resid ) 
 
-
+print(arr_nb_slides)
 
 # 5) Determination of the indexes of this maximum value 
 #inside the arr_mean_freq:
@@ -552,6 +559,8 @@ calc_coord_plane( best_direction,
                 arr_sin_phi )
 
 outFile.close()
+
+print("RUNTIME = ", time.time() - start_time)
 
 
 
