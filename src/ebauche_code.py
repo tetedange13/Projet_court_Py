@@ -2,8 +2,8 @@
 
 import numpy as np
 import sys
-#from Bio.PDB.NACCESS import run_naccess
-#from Bio.PDB import PDBParser 
+from Bio.PDB.NACCESS import run_naccess
+from Bio.PDB import PDBParser 
 import os
 
 
@@ -12,15 +12,15 @@ def get_acessible_CA(pdb_id, path_to_naccess_exe, thresold_ASA):
     """Takes the pdb id (as a str), runs NACCESS on it (ASA calculation)"""
     
     pdb_fileName = "../data/" + pdb_id + ".pdb"
-    #p = PDBParser()
-    #structure = p.get_structure(pdb_id, pdb_fileName)
-    #model = structure[0]
-    #output_naccess = run_naccess(model, pdb_fileName, 
-                                 #naccess = path_to_naccess_exe)[0]
+    p = PDBParser()
+    structure = p.get_structure(pdb_id, pdb_fileName)
+    model = structure[0]
+    output_naccess = run_naccess(model, pdb_fileName, 
+                                 naccess = path_to_naccess_exe)[0]
     
-    naccessFile = open("../data/6b87.rsa", 'r')
-    output_naccess = naccessFile.readlines()
-    naccessFile.close()
+    #naccessFile = open("../data/6b87.rsa", 'r')
+    #output_naccess = naccessFile.readlines()
+    #naccessFile.close()
      
     dict_CA = {} #Contains all useful info for CA
     nb_accessible_CA = 0
@@ -125,6 +125,7 @@ def generate_sinCos_arr(precision):
     size_arr = precision+1
     arr_cos = np.zeros( size_arr, dtype=float )
     arr_sin = np.zeros( size_arr, dtype=float )
+    print("TAILLE= ", np.shape(arr_cos))
     
 
     #We start with filling with evident values (not zero) of cos et sin:
@@ -468,8 +469,9 @@ arr_cos_phi, arr_sin_phi = arr_cos_theta, arr_sin_theta
 #of the unit vector dividing the 3D space
 #(necessity to reshape the phi matrixes, to make the product)
 size_arr = precision + 1
-vectArr_X = arr_cos_theta.T @ arr_sin_phi
-vectArr_Y = arr_sin_theta.T @ arr_sin_phi
+print(arr_sin_phi[:, np.newaxis])
+vectArr_X = arr_cos_theta[:, np.newaxis] @ arr_sin_phi[np.newaxis, :]
+vectArr_Y = arr_sin_theta[:, np.newaxis] @ arr_sin_phi[np.newaxis, :]
 vectArr_Z = np.tile( arr_cos_phi, (size_arr, 1) )
 
 
