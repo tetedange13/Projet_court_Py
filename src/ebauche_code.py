@@ -2,8 +2,8 @@
 
 import numpy as np
 import sys
-from Bio.PDB.NACCESS import run_naccess
-from Bio.PDB import PDBParser 
+#from Bio.PDB.NACCESS import run_naccess
+#from Bio.PDB import PDBParser 
 import os
 
 
@@ -12,12 +12,16 @@ def get_acessible_CA(pdb_id, path_to_naccess_exe, thresold_ASA):
     """Takes the pdb id (as a str), runs NACCESS on it (ASA calculation)"""
     
     pdb_fileName = "../data/" + pdb_id + ".pdb"
-    p = PDBParser()
-    structure = p.get_structure(pdb_id, pdb_fileName)
-    model = structure[0]
-    output_naccess = run_naccess(model, pdb_fileName, 
-                                 naccess = path_to_naccess_exe)[0]
+    #p = PDBParser()
+    #structure = p.get_structure(pdb_id, pdb_fileName)
+    #model = structure[0]
+    #output_naccess = run_naccess(model, pdb_fileName, 
+                                 #naccess = path_to_naccess_exe)[0]
     
+    naccessFile = open("../data/6b87.rsa", 'r')
+    output_naccess = naccessFile.readlines()
+    naccessFile.close()
+     
     dict_CA = {} #Contains all useful info for CA
     nb_accessible_CA = 0
     resid = 0
@@ -41,7 +45,7 @@ def get_acessible_CA(pdb_id, path_to_naccess_exe, thresold_ASA):
                                    'relASA': relASA }
     
     
-    #The resid correspond here to the total number of CA             
+    #The resid correspond here to the total number of CA
     return ( dict_CA, nb_accessible_CA, resid )
 
 
@@ -49,7 +53,7 @@ def get_coord(dict_CA, nb_accessible_CA, nb_tot_CA, pdbFile, pdb_id):
     """Get the coordinate of the C-alpha which are accessible to the solvent 
     (i.e. ASA beyond the threesold), from a pdb file (file obj) 
     given as argument. Count also the number of C-alpha"""
-    
+
     dict_CA_final = dict_CA #To avoid side effects
     
     outFile = open("../results/" + pdb_id + '_out.pdb', 'w')
@@ -66,20 +70,22 @@ def get_coord(dict_CA, nb_accessible_CA, nb_tot_CA, pdbFile, pdb_id):
         
             if line[12:16].strip() == "CA":
                 resid += 1
+
                 X_coord = float( line[30:38].strip() )
                 Y_coord = float( line[38:46].strip() )
                 Z_coord = float( line[46:54].strip() )
                 
                 #To calculate the center of mass of the protein:
                 sum_X += X_coord ; sum_Y += Y_coord ; sum_Z += Z_coord
-
+                
                 if resid in dict_CA.keys(): #If considered as accessible
                     list_resid[i] = resid ; i += 1
                     
                     dict_CA_final[resid]['x'] = X_coord 
                     dict_CA_final[resid]['y'] = Y_coord 
                     dict_CA_final[resid]['z'] = Z_coord  
-    
+
+
     outFile.write("MASTER\n")
     outFile.close()
     centerOfMass = [ sum_X/nb_tot_CA, sum_Y/nb_tot_CA, sum_Z/nb_tot_CA ] 
@@ -91,7 +97,7 @@ def transform_coord(dict_coord, centerOfMass):
     """Takes the coordinates of the CA of the protein, its center of mass and
     returns a dict with transformed coord, i.e. with the center of mass set as 
     the origin of the system."""
- 
+    
     transformed_dict = dict_coord #To avoid side effects
     for resid in dict_coord.keys():
         transformed_dict[resid]['x'] -= centerOfMass[0]
@@ -117,20 +123,20 @@ def generate_sinCos_arr(precision):
     #Or phi (from à to pi):
     
     size_arr = precision+1
-    arr_cos = np.zeros((size_arr, 1), dtype=float)
-    arr_sin = np.zeros((size_arr, 1), dtype=float)
+    arr_cos = np.zeros( size_arr, dtype=float )
+    arr_sin = np.zeros( size_arr, dtype=float )
     
 
     #We start with filling with evident values (not zero) of cos et sin:
     #En 0:
-    arr_cos[0, 0] = 1.0
+    arr_cos[0] = 1.0
     #En pi:
-    arr_cos[precision, 0] = -1.0
+    arr_cos[precision] = -1.0
     
     if precision%2 == 0: #If the precision is even, there is also pi/2
         idx_pi_over_2 = int( size_arr/2 )
         #En pi/2:
-        arr_sin[idx_pi_over_2, 0 ] = 1.0 
+        arr_sin[idx_pi_over_2] = 1.0 
             
             
     #N-E DIAL (will serve as a reference to fill the other dial):
@@ -139,8 +145,8 @@ def generate_sinCos_arr(precision):
                            np.pi/2 - 1/precision, 
                            np.pi/precision):
     #J'ai trouve le "-1/pas" un peu empiriquement => A VOIR...
-        arr_cos[i, 0] = np.cos(angle)
-        arr_sin[i, 0] = np.sin(angle)
+        arr_cos[i] = np.cos(angle)
+        arr_sin[i] = np.sin(angle)
         i += 1     
     
     #N-O dial:  
@@ -154,8 +160,8 @@ def generate_sinCos_arr(precision):
         
     end = start + nb_to_calc
     
-    arr_cos[start:end, 0] = -arr_cos[1:i, 0][::-1]
-    arr_sin[start:end, 0] = arr_sin[1:i, 0][::-1]
+    arr_cos[start:end] = -arr_cos[1:i][::-1]
+    arr_sin[start:end] = arr_sin[1:i][::-1]
     
     return (arr_cos, arr_sin)        
     
@@ -291,7 +297,8 @@ def dist_point_origin(point):
 
 
 
-def improve_mb_position(best_direction, dict_CA, nb_CA, list_resid, best_start_dist_plane):
+def improve_mb_position(best_direction, dict_CA, nb_CA, 
+                        list_resid, best_start_dist_plane):
     #Je l'ai un peu optimisée, pour éviter de stocker en memoire une matrice de
     #freq, que je dois ensuite parcourir pour trouver le max avec np.argmax()
     #Par contre, le repositionnement du plan au debut, il est pas tres 
@@ -314,10 +321,10 @@ def improve_mb_position(best_direction, dict_CA, nb_CA, list_resid, best_start_d
     
     current_max_freq = freq_hydrophob(dist_arr, nb_CA, dict_CA, list_resid)
     dist_arr -= 1 ; idx_max_freq = 0
-    #print(current_max_freq)
+
     for r in range(1, nb_slides):
         new_freq = freq_hydrophob(dist_arr, nb_CA, dict_CA, list_resid)
-        #print(new_freq)
+
         if new_freq > current_max_freq:
             current_max_freq = new_freq
             idx_max_freq = r
@@ -329,10 +336,11 @@ def improve_mb_position(best_direction, dict_CA, nb_CA, list_resid, best_start_d
 
 
 
-def draw_best_axis(nb_points, best_direction, centerOfMass, outFile):
+def draw_best_axis(nb_points, best_direction, 
+                   centerOfMass, outFile, well_formated):
     for r in range(-nb_points, nb_points):
         point_to_write = r * best_direction + centerOfMass
-        outFile.write( good_str.format( "HETATM", 
+        outFile.write( well_formated.format( "HETATM", 
                                         r, 
                                         "N",
                                         "DUM",
@@ -359,15 +367,15 @@ def calc_coord_plane(best_direction, dist_best_plane, outFile, centerOfMass,
     #z = r * cos(phi)
     
     #We transform the coordinates in the other side (adding the center of mass):
-    middle_point = dist_best_plane * best_direction + centerOfMass
+    ma_dist = 31
+    middle_point = ma_dist * best_direction + centerOfMass
+    
     idx_theta, idx_phi = idx_best_angles
     theta, phi = idx_best_angles * np.pi / precision
-    #print(theta, phi)
+    mon_angle = np.pi / 3
     
-    mon_angle = 3 * np.pi / 7
-    
-    H_left = dist_best_plane / np.cos(theta + mon_angle)
-    H_right = dist_best_plane / np.cos(theta - mon_angle)
+    H_left = ma_dist / np.cos(theta + mon_angle)
+    H_right = ma_dist / np.cos(theta - mon_angle)
     
     X_right = H_right * arr_sin[idx_phi] * np.cos(theta + mon_angle)
     Y_right = H_right * arr_sin[idx_phi] * np.sin(theta + mon_angle)
@@ -378,18 +386,18 @@ def calc_coord_plane(best_direction, dist_best_plane, outFile, centerOfMass,
     Y_left = H_left * arr_sin[idx_phi] * np.sin(theta - mon_angle)
     Z_left = H_left * arr_cos[idx_phi]
     left_point = np.array( [X_left, Y_left, Z_left] ) + centerOfMass
-    #print(left_point, right_point, middle_point)
+    print(H_left)
     
-    print(middle_point)
-    good_str = "{:6s}{:5d} {:^4s} {:3s}  {:4d}    {:8.3f}{:8.3f}""{:8.3f}\n"
+    #print("left_point = ", right_point)
+    well_formated = "{:6s}{:5d} {:^4s} {:3s}  {:4d}    {:8.3f}{:8.3f}{:8.3f}\n"
     
     #Draw the axis orthogonal to the membrane
-    #draw_best_axis(50, best_direction, centerOfMass, outFile)
+    draw_best_axis(50, best_direction, centerOfMass, outFile, well_formated)
     i = 0
     for point_plane in [ left_point, middle_point, right_point ]:
-        print(point_plane, "sds\n")
+        #print(point_plane, "sds\n")
         i += 1
-        outFile.write( good_str.format("HETATM", 
+        outFile.write( well_formated.format("HETATM", 
                                           i, 
                                           "N",
                                           "DUM",
@@ -460,9 +468,10 @@ arr_cos_phi, arr_sin_phi = arr_cos_theta, arr_sin_theta
 #of the unit vector dividing the 3D space
 #(necessity to reshape the phi matrixes, to make the product)
 size_arr = precision + 1
-vectArr_X = arr_cos_theta @ arr_sin_phi.T
-vectArr_Y = arr_sin_theta @ arr_sin_phi.T
-vectArr_Z = np.tile( arr_cos_phi.T, (size_arr, 1) )
+vectArr_X = arr_cos_theta.T @ arr_sin_phi
+vectArr_Y = arr_sin_theta.T @ arr_sin_phi
+vectArr_Z = np.tile( arr_cos_phi, (size_arr, 1) )
+
 
 #REMARK: The vectArr_Z has been created by repeating the line of cos(phi) as many
 #times there are values for the theta angle
@@ -521,9 +530,6 @@ dist_best_plane = improve_mb_position( ma_direction,
                                        nb_accessible_CA, 
                                        list_resid,
                                        best_start_dist_plane )
-
-
-print(dist_best_plane)
 
 
 # 6) Manage the output:
