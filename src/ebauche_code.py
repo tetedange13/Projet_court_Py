@@ -118,16 +118,11 @@ def generate_sinCos_arr(precision):
     #cos(pi+x) = -cos(x) ; sin(pi+x) = -sin(x) <=> S-O dial
     #cos(-x) = cos(x) ; sin(-x) = -sin(x) <=> S-E dial
     
-    
-    #We 1st disinguish the cases where we have to deal with theta (from 0 to 2pi)
-    #Or phi (from à to pi):
-    
     size_arr = precision+1
     arr_cos = np.zeros( size_arr, dtype=float )
     arr_sin = np.zeros( size_arr, dtype=float )
-    print("TAILLE= ", np.shape(arr_cos))
     
-
+    
     #We start with filling with evident values (not zero) of cos et sin:
     #En 0:
     arr_cos[0] = 1.0
@@ -337,8 +332,9 @@ def improve_mb_position(best_direction, dict_CA, nb_CA,
 
 
 
-def draw_best_axis(nb_points, best_direction, 
+def draw_axis(nb_points, best_direction, 
                    centerOfMass, outFile, well_formated):
+    """Draws an axis from a direction, given by a unit vector"""               
     for r in range(-nb_points, nb_points):
         point_to_write = r * best_direction + centerOfMass
         outFile.write( well_formated.format( "HETATM", 
@@ -369,33 +365,42 @@ def calc_coord_plane(best_direction, dist_best_plane, outFile, centerOfMass,
     
     #We transform the coordinates in the other side (adding the center of mass):
     ma_dist = 31
-    middle_point = ma_dist * best_direction + centerOfMass
+    middle_point = dist_best_plane * best_direction + centerOfMass
     
     idx_theta, idx_phi = idx_best_angles
     theta, phi = idx_best_angles * np.pi / precision
     mon_angle = np.pi / 3
+
+    H = dist_best_plane / np.cos(theta + mon_angle)
     
-    H_left = ma_dist / np.cos(theta + mon_angle)
-    H_right = ma_dist / np.cos(theta - mon_angle)
+    X_east = H * np.sin(phi - mon_angle) * np.cos(theta - mon_angle)
+    Y_east = H * np.sin(phi - mon_angle) * np.sin(theta - mon_angle)
+    Z_east = H * np.sin(phi - mon_angle)
+    east_point = np.array( [X_east, Y_east, Z_east] ) + centerOfMass
     
-    X_right = H_right * arr_sin[idx_phi] * np.cos(theta + mon_angle)
-    Y_right = H_right * arr_sin[idx_phi] * np.sin(theta + mon_angle)
-    Z_right = H_right * arr_cos[idx_phi]
-    right_point = np.array( [X_right, Y_right, Z_right] ) + centerOfMass
+    X_west = H * np.sin(phi - mon_angle) * np.cos(theta + mon_angle)
+    Y_west = H * np.sin(phi - mon_angle) * np.sin(theta + mon_angle)
+    Z_west = H * np.sin(phi - mon_angle)
+    west_point = np.array( [X_west, Y_west, Z_west] ) + centerOfMass
     
-    X_left = H_left * arr_sin[idx_phi] * np.cos(theta - mon_angle)
-    Y_left = H_left * arr_sin[idx_phi] * np.sin(theta - mon_angle)
-    Z_left = H_left * arr_cos[idx_phi]
-    left_point = np.array( [X_left, Y_left, Z_left] ) + centerOfMass
-    print(H_left)
+    X_north = H * np.sin(phi + mon_angle) * np.cos(theta + mon_angle)
+    Y_north = H * np.sin(phi + mon_angle) * np.sin(theta + mon_angle)
+    Z_north = H * np.sin(phi + mon_angle)
+    north_point = np.array( [X_north, Y_north, Z_north] ) + centerOfMass
     
-    #print("left_point = ", right_point)
+    X_south = H * np.sin(phi + mon_angle) * np.cos(theta - mon_angle)
+    Y_south = H * np.sin(phi + mon_angle) * np.sin(theta - mon_angle)
+    Z_south = H * np.sin(phi + mon_angle)
+    south_point = np.array( [X_south, Y_south, Z_south] ) + centerOfMass
+        
+    #print(left_point)
+    #print(right_point)
     well_formated = "{:6s}{:5d} {:^4s} {:3s}  {:4d}    {:8.3f}{:8.3f}{:8.3f}\n"
     
     #Draw the axis orthogonal to the membrane
-    draw_best_axis(50, best_direction, centerOfMass, outFile, well_formated)
+    draw_axis(50, best_direction, centerOfMass, outFile, well_formated)
     i = 0
-    for point_plane in [ left_point, middle_point, right_point ]:
+    for point_plane in ( east_point, north_point, south_point, west_point ):
         #print(point_plane, "sds\n")
         i += 1
         outFile.write( well_formated.format("HETATM", 
@@ -466,10 +471,9 @@ arr_cos_theta, arr_sin_theta = generate_sinCos_arr(precision)
 arr_cos_phi, arr_sin_phi = arr_cos_theta, arr_sin_theta
 
 #Use of matricial product to calculate each of the x, y and z matrixes
-#of the unit vector dividing the 3D space
-#(necessity to reshape the phi matrixes, to make the product)
+#of the unit vector dividing half of the the 3D space
+#(necessity to reshape the different matrixes, to make the product)
 size_arr = precision + 1
-print(arr_sin_phi[:, np.newaxis])
 vectArr_X = arr_cos_theta[:, np.newaxis] @ arr_sin_phi[np.newaxis, :]
 vectArr_Y = arr_sin_theta[:, np.newaxis] @ arr_sin_phi[np.newaxis, :]
 vectArr_Z = np.tile( arr_cos_phi, (size_arr, 1) )
@@ -479,7 +483,7 @@ vectArr_Z = np.tile( arr_cos_phi, (size_arr, 1) )
 #times there are values for the theta angle
 
 #We merge the 3 arrays in a single one, to simplify its passing as an argument: 
-arr_unit_vect = np.zeros( (3, size_arr, size_arr), dtype=float )
+arr_unit_vect = np.zeros( (3, size_arr, size_arr), dtype = float )
 arr_unit_vect[0, :, :] = vectArr_X
 arr_unit_vect[1, :, :] = vectArr_Y
 arr_unit_vect[2, :, :] = vectArr_Z
