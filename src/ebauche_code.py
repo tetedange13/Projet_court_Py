@@ -89,7 +89,7 @@ def get_coord(dict_CA, nb_accessible_CA, nb_tot_CA, pdbFile, pdb_id):
 
     outFile.write("MASTER\n")
     outFile.close()
-    centerOfMass = [ sum_X/nb_tot_CA, sum_Y/nb_tot_CA, sum_Z/nb_tot_CA ] 
+    centerOfMass = np.array([sum_X/nb_tot_CA, sum_Y/nb_tot_CA, sum_Z/nb_tot_CA]) 
     return (dict_CA_final, list_resid, centerOfMass)
 
 
@@ -110,7 +110,7 @@ def transform_coord(dict_coord, centerOfMass):
 
 
 
-def generate_sinCos_arr(precision):
+def generate_trigo_arr(precision):
     """Prend un pas (sorte de resolution), decoupe le cercle trigo et renvoie 2
      matrices colonnes des cos et sin de ces angles"""
      
@@ -333,22 +333,86 @@ def improve_mb_position(best_direction, dict_CA, nb_CA,
     return best_start_dist_plane - idx_max_freq
 
 
+def draw_point(point, num, outFile):
+    well_formated = "{:6s}{:5d} {:^4s} {:3s}  {:4d}    {:8.3f}{:8.3f}{:8.3f}\n"
 
-def draw_axis(nb_points, best_direction, 
-                   centerOfMass, outFile, well_formated):
-    """Draws an axis from a direction, given by a unit vector"""               
-    for r in range(-nb_points, nb_points):
-        point_to_write = r * best_direction + centerOfMass
-        outFile.write( well_formated.format( "HETATM", 
-                                        r, 
+    outFile.write( well_formated.format( "HETATM", 
+                                        num, 
                                         "N",
                                         "DUM",
-                                        r,
-                                        point_to_write[0],
-                                        point_to_write[1],
-                                        point_to_write[2] )) 
+                                        num,
+                                        point[0],
+                                        point[1],
+                                        point[2] ))
+    
 
+def draw_axis(start, end, step, best_direction, centerOfMass, outFile):
+    """Draws an axis from a direction, given by a unit vector"""               
+    for r in range(start, end, step):
+        point_to_write = r * best_direction + centerOfMass
+        draw_point(point_to_write, r, outFile)
 
+        
+                                        
+def draw_plane(dist_best_plane, idx_best_angles, precision, 
+               centerOfMass, outFile):
+    gap = 5 #Distance between two consecutive points
+    limit_angle = 3*np.pi/7
+    nb_points = 5
+    unit_angle = limit_angle/nb_points
+    
+    idx_theta, idx_phi = idx_best_angles
+    theta, phi = idx_best_angles * np.pi / precision
+    
+    for i in range(1, nb_points):
+        angle = np.arctan(i * gap / dist_best_plane) 
+        H = dist_best_plane / np.cos(phi + angle)
+        
+        for j in range(8):
+            X_point = H * np.sin(phi + angle) * np.cos(theta + j*np.pi/4)
+            Y_point = H * np.sin(phi + angle) * np.sin(theta + j*np.pi/4)
+            Z_point = H * np.cos(phi + angle)
+            point = np.array( [X_point, Y_point, Z_point] ) + centerOfMass
+            draw_point(point, i, outFile)
+
+            
+            
+def draw_planes(dist_best_plane, trigo_phi, trigo_theta, centerOfMass,
+                arr_trigo_phiShift, arr_trigo_thetaShift, outFile, mode="hollow"):
+    #cos(a + b) = cos(a)*cos(b) - sin(a)*sin(b)
+    #sin(a + b) = sin(a)*cos(b) + sin(b)*cos(a)
+    
+    cos_phi, sin_phi = trigo_phi ; cos_theta, sin_theta = trigo_theta
+    arr_cos_phiShift, arr_sin_phiShift = arr_trigo_phiShift
+    arr_cos_thetaShift, arr_sin_thetaShift = arr_trigo_thetaShift
+
+    if mode == "plain":
+        width_circle = 3 #Number of points in the radium of the external circle
+        start = nb_points - width_circle
+    elif mode == "hollow":
+        start = 1
+    
+    for i in range(start, nb_points):
+        cos_phiShift, sin_phiShift = arr_cos_phiShift[i], arr_sin_phiShift[i]
+        
+        cos_phiShifted = cos_phi*cos_phiShift - sin_phi*sin_phiShift
+        sin_phiShifted = sin_phi*cos_phiShift + cos_phi*sin_phiShift
+        
+        H = dist_best_plane / cos_phiShifted     
+        period = len(arr_cos_phiShift)
+        
+        for j in range(2*period):
+            cos_thetaShift = arr_cos_thetaShift[j]
+            sin_thetaShift = arr_sin_thetaShift[j]
+            cos_thetaShifted = cos_theta*cos_thetaShift-sin_theta*sin_thetaShift
+            sin_thetaShifted = sin_theta*cos_thetaShift+cos_theta*sin_thetaShift
+        
+            X_point = H * sin_phi_shifted * cos_thetaShifted
+            Y_point = H * sin_phi_shifted * sin_thetaShifted
+            Z_point = H * cos_phi_shifted
+            point = np.array( [X_point, Y_point, Z_point] ) + centerOfMass
+            draw_point(point, i, outFile)
+            
 
 
 def calc_coord_plane(best_direction, dist_best_plane, outFile, centerOfMass,
@@ -365,57 +429,24 @@ def calc_coord_plane(best_direction, dist_best_plane, outFile, centerOfMass,
     #y = r * sin(phi) * sin(theta)
     #z = r * cos(phi)
     
-    #We transform the coordinates in the other side (adding the center of mass):
-    ma_dist = 31
-    middle_point = dist_best_plane * best_direction + centerOfMass
+    #Draw the axis orthogonal to the membrane
+    draw_axis(0, dist_best_plane, 5, best_direction, centerOfMass, outFile)
     
     idx_theta, idx_phi = idx_best_angles
-    theta, phi = idx_best_angles * np.pi / precision
-    mon_angle = np.pi / 3
+    trigo_phi = np.array([ arr_cos[idx_phi], arr_sin[idx_phi] ])
+    trigo_theta = np.array([ arr_cos[idx_theta], arr_sin[idx_theta] ])
+    
+    limit_angle =  2*np.pi/7
+    nb_points = 10
+    phiShift = limit_angle/nb_points #Angle between two consecutive points
+    arr_trigo_phiShift = generate_trigo_arr(phiShift)
+    
+    density = 8 ; thetaShift = np.pi/density
+    arr_trigo_thetaShift = generate_trigo_arr(theta_Shift)
 
-    H = dist_best_plane / np.cos(phi + mon_angle)
-    
-    X_east = H * np.sin(phi + mon_angle) * np.cos(theta)
-    Y_east = H * np.sin(phi + mon_angle) * np.sin(theta)
-    Z_east = H * np.sin(phi + mon_angle)
-    east_point = np.array( [X_east, Y_east, Z_east] ) + centerOfMass
-    
-    X_north = H * np.sin(phi + mon_angle) * np.cos(theta + np.pi/2)
-    Y_north = H * np.sin(phi + mon_angle) * np.sin(theta + np.pi/2)
-    Z_north = H * np.sin(phi + mon_angle)
-    north_point = np.array( [X_north, Y_north, Z_north] ) + centerOfMass  
-    
-    X_west = H * np.sin(phi + mon_angle) * np.cos(theta + np.pi)
-    Y_west = H * np.sin(phi + mon_angle) * np.sin(theta + np.pi)
-    Z_west = H * np.sin(phi + mon_angle)
-    west_point = np.array( [X_west, Y_west, Z_west] ) + centerOfMass
-      
-    X_south = H * np.sin(phi + mon_angle) * np.cos(theta + 3*np.pi/2)
-    Y_south = H * np.sin(phi + mon_angle) * np.sin(theta + 3*np.pi/2)
-    Z_south = H * np.sin(phi + mon_angle)
-    south_point = np.array( [X_south, Y_south, Z_south] ) + centerOfMass
-        
-    #print(left_point)
-    #print(right_point)
-    well_formated = "{:6s}{:5d} {:^4s} {:3s}  {:4d}    {:8.3f}{:8.3f}{:8.3f}\n"
-    
-    #Draw the axis orthogonal to the membrane
-    #draw_axis(50, best_direction, centerOfMass, outFile, well_formated)
-    i = 0
-    for point_plane in ( middle_point, north_point, south_point,
-                         west_point, east_point ):
-        #print(point_plane, "sds\n")
-        i += 1
-        outFile.write( well_formated.format("HETATM", 
-                                          i, 
-                                          "N",
-                                          "DUM",
-                                          i,
-                                          point_plane[0],
-                                          point_plane[1],
-                                          point_plane[2] )) 
-    
-    
+    #draw_plane(dist_best_plane, idx_best_angles, precision, centerOfMass, outFile)
+    draw_planes(dist_best_plane+15, trigo_phi, trigo_theta, centerOfMass,
+                arr_trigo_phiShift, arr_trigo_thetaShift, outFile)   
     
     
     
@@ -472,7 +503,7 @@ dict_CA = transform_coord(dict_CA, centerOfMass)
 precision = int(arg_cmd[1])
 
 #These arrays need to be created only one:
-arr_cos_theta, arr_sin_theta = generate_sinCos_arr(precision)
+arr_cos_theta, arr_sin_theta = generate_trigo_arr(precision)
 arr_cos_phi, arr_sin_phi = arr_cos_theta, arr_sin_theta
 
 #Use of matricial product to calculate each of the x, y and z matrixes
@@ -519,7 +550,7 @@ for i in range(size_arr):
                                              dict_CA, 
                                              list_resid ) 
 
-print(arr_nb_slides)
+#print(arr_nb_slides)
 
 # 5) Determination of the indexes of this maximum value 
 #inside the arr_mean_freq:
