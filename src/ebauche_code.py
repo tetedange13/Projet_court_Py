@@ -6,22 +6,28 @@ from Bio.PDB.NACCESS import run_naccess
 from Bio.PDB import PDBParser 
 import os
 import time
+from getopt import getopt
+import itertools as itr
+import multiprocess as mp
 
 
 
-def get_acessible_CA(pdb_id, path_to_naccess_exe, thresold_ASA):
-    """Takes the pdb id (as a str), runs NACCESS on it (ASA calculation)"""
+
+def get_acessible_CA(inputFile, path_to_naccess_exe, thresold_ASA):
+    """Takes the path to the pdbFile and runs NACCESS on it (ASA calculation)"""
     
-    #pdb_fileName = "../data/" + pdb_id + ".pdb"
-    #p = PDBParser()
-    #structure = p.get_structure(pdb_id, pdb_fileName)
-    #model = structure[0]
-    #output_naccess = run_naccess(model, pdb_fileName, 
-    #                             naccess = path_to_naccess_exe)[0]
+    pdb_fileName = os.path.basename(inputFile)
+    pdb_id = pdb_fileName.split('.')[0]
+    p = PDBParser(QUIET = True)
+    structure = p.get_structure(pdb_id, inputFile)
+    model = structure[0]
+    output_naccess = run_naccess(model, inputFile, 
+                                 naccess = path_to_naccess_exe)[0]
     
-    naccessFile = open("../data/6b87.rsa", 'r')
-    output_naccess = naccessFile.readlines()
-    naccessFile.close()
+    #If NACCESS not available:
+    #naccessFile = open("../data/6b87.rsa", 'r')
+    #output_naccess = naccessFile.readlines()
+    #naccessFile.close()
      
     dict_CA = {} #Contains all useful info for CA
     nb_accessible_CA = 0
@@ -50,12 +56,15 @@ def get_acessible_CA(pdb_id, path_to_naccess_exe, thresold_ASA):
     return ( dict_CA, nb_accessible_CA, resid )
 
 
-def get_coord(dict_CA, nb_accessible_CA, nb_tot_CA, pdbFile, pdb_id):
+def get_coord(dict_CA, nb_accessible_CA, nb_tot_CA, inputFile):
     """Get the coordinate of the C-alpha which are accessible to the solvent 
     (i.e. ASA beyond the threesold), from a pdb file (file obj) 
     given as argument. Count also the number of C-alpha"""
 
     dict_CA_final = dict_CA #To avoid side effects
+    
+    pdbFile = open(inputFile, 'r')
+    pdb_id = os.path.basename(inputFile).split('.')[0]
     
     outFile = open("../results/" + pdb_id + '_out.pdb', 'w')
     
@@ -88,7 +97,7 @@ def get_coord(dict_CA, nb_accessible_CA, nb_tot_CA, pdbFile, pdb_id):
 
 
     outFile.write("MASTER\n")
-    outFile.close()
+    pdbFile.close() ; outFile.close()
     centerOfMass = np.array([sum_X/nb_tot_CA, sum_Y/nb_tot_CA, sum_Z/nb_tot_CA]) 
     return (dict_CA_final, list_resid, centerOfMass)
 
@@ -251,7 +260,10 @@ def freq_hydrophob(start_dist_points_arr, nb_CA, dict_CA, list_resid):
             
             if aa in list_hydrophob_aa:
                 nb_hydrophob_accessible += 1
-            
+    
+    #if nb_hydrophob_accessible/nb_accessible > 0.3:
+        #print("NB_HYDROPHB= ",nb_hydrophob_accessible, "NB_ACCESS= ",nb_accessible)
+        #print("FREQ = ", nb_hydrophob_accessible/nb_accessible)
     return nb_hydrophob_accessible/nb_accessible
 
 
@@ -272,15 +284,16 @@ def sliding_slice(nb_slides, start_dist_points_arr, nb_CA, dict_CA, list_resid):
 
     dist_arr = start_dist_points_arr
     sum_freq_hydrophob = 0
-    step_slides = 5
+    step_slides = 1
     
-    for r in range(nb_slides, step_slides):
+    for r in range(0, nb_slides, step_slides):
         sum_freq_hydrophob += freq_hydrophob( dist_arr, 
                                               nb_CA, 
                                               dict_CA, 
                                               list_resid )
         dist_arr -= step_slides #We slide the slice of 1A
         
+
     return sum_freq_hydrophob/nb_slides
          
 
@@ -336,14 +349,10 @@ def improve_mb_position(best_direction, dict_CA, nb_CA,
 def draw_point(point, num, outFile):
     well_formated = "{:6s}{:5d} {:^4s} {:3s}  {:4d}    {:8.3f}{:8.3f}{:8.3f}\n"
 
-    outFile.write( well_formated.format( "HETATM", 
-                                        num, 
-                                        "N",
-                                        "DUM",
-                                        num,
-                                        point[0],
-                                        point[1],
-                                        point[2] ))
+    outFile.write( well_formated.format( "HETATM", num, "N", "DUM", num,
+                                         point[0],
+                                         point[1],
+                                         point[2] ))
     
 
 def draw_axis(start, end, step, best_direction, centerOfMass, outFile):
@@ -378,7 +387,8 @@ def draw_plane(dist_best_plane, idx_best_angles, precision,
             
             
 def draw_planes(dist_best_plane, trigo_phi, trigo_theta, centerOfMass,
-                arr_trigo_phiShift, arr_trigo_thetaShift, outFile, mode="hollow"):
+                arr_trigo_phiShift, arr_trigo_thetaShift, 
+                outFile, mode="hollow"):
     #cos(a + b) = cos(a)*cos(b) - sin(a)*sin(b)
     #sin(a + b) = sin(a)*cos(b) + sin(b)*cos(a)
     
@@ -415,11 +425,15 @@ def draw_planes(dist_best_plane, trigo_phi, trigo_theta, centerOfMass,
             
 
 
-def calc_coord_plane(best_direction, dist_best_plane, outFile, centerOfMass,
-                     idx_best_angles, precision, arr_cos, arr_sin):
+def calc_coord_plane(inputFile, best_direction, dist_best_plane, centerOfMass,
+                     arr_cos, arr_sin, mode="hollow"):
     """To be able to have a nice PyMol output of our plan, we need to determine
     the coordinates of the 4 corners of our plane 
     (represented as a 3D rectangle)"""
+    
+    pdb_id = os.path.basename(inputFile).split('.')[0]
+    outFile = open("../results/" + pdb_id + "_out.pdb", 'a')
+    
     
     #Ici, on va utiliser la formule suivante:
     # cos(phi + pi/4) = R / H
@@ -431,7 +445,8 @@ def calc_coord_plane(best_direction, dist_best_plane, outFile, centerOfMass,
     
     #Draw the axis orthogonal to the membrane
     draw_axis(0, dist_best_plane, 5, best_direction, centerOfMass, outFile)
-    
+    draw_axis(-25, 25, 5, best_direction, centerOfMass, outFile)
+        
     idx_theta, idx_phi = idx_best_angles
     trigo_phi = np.array([ arr_cos[idx_phi], arr_sin[idx_phi] ])
     trigo_theta = np.array([ arr_cos[idx_theta], arr_sin[idx_theta] ])
@@ -439,16 +454,30 @@ def calc_coord_plane(best_direction, dist_best_plane, outFile, centerOfMass,
     limit_angle =  2*np.pi/7
     nb_points = 10
     phiShift = limit_angle/nb_points #Angle between two consecutive points
-    arr_trigo_phiShift = generate_trigo_arr(phiShift)
+    #arr_trigo_phiShift = generate_trigo_arr(phiShift)
     
     density = 8 ; thetaShift = np.pi/density
-    arr_trigo_thetaShift = generate_trigo_arr(theta_Shift)
+    #arr_trigo_thetaShift = generate_trigo_arr(theta_Shift)
 
     #draw_plane(dist_best_plane, idx_best_angles, precision, centerOfMass, outFile)
-    draw_planes(dist_best_plane+15, trigo_phi, trigo_theta, centerOfMass,
-                arr_trigo_phiShift, arr_trigo_thetaShift, outFile)   
+    #draw_planes(dist_best_plane+15, trigo_phi, trigo_theta, centerOfMass,
+                #arr_trigo_phiShift, arr_trigo_thetaShift, outFile)   
     
     
+    #We write a pymol_file, which can be executed automaticly:
+    pymol_file = open("cmd_pymol.pml", 'w')
+    
+    loading = "cmd.load('" + str(outFile.name) + "')\n"
+    bg = "cmd.bg_color('white')\n"
+    sticks = "cmd.show('sticks')\n"
+    spheres = "cmd.show('spheres', 'HETATM')\n"
+    
+    for ligne in (loading, bg, sticks, spheres):
+        pymol_file.write(ligne)
+    
+    pymol_file.close()
+    
+    outFile.close()
     
     
     
@@ -458,6 +487,22 @@ def calc_coord_plane(best_direction, dist_best_plane, outFile, centerOfMass,
     
     return
 
+ 
+def parallelized_fun(tupl):
+    i,j = tupl
+    unit_vect = arr_unit_vect[:, i, j]
+            
+    #4-1) We position the plan well:
+    tuple_returned = start_position_plane( unit_vect, dict_CA, 
+                                               nb_accessible_CA, list_resid )
+    nb_slides, start_dist_points_arr, start_dist_plane = tuple_returned
+    start_dist_plane_arr[i, j] = start_dist_plane
+    arr_nb_slides[i, j] = nb_slides
+        
+    #4-2) We slide along the current direction:   
+    return sliding_slice( nb_slides, start_dist_points_arr, 
+                                             nb_accessible_CA, dict_CA, 
+                                             list_resid )      
    
 
 
@@ -465,29 +510,35 @@ def calc_coord_plane(best_direction, dist_best_plane, outFile, centerOfMass,
 
 start_time = time.time()
 
-arg_cmd = sys.argv
+#We get the arguments given:
+path_to_naccess_exe = 'naccess'
+opts, args = getopt(sys.argv[1:], "hi:p:", ["naccess=", "precision="])
+
+for opt, arg in opts:
+    if opt == "-h":
+        print("Ceci est un message d'aide")
+        sys.exit()
+        
+    elif opt == "-i":
+        inputFile = arg    
+        
+    elif opt == "--naccess":
+        path_to_naccess_exe = arg
+    
+    elif opt in ("-p", "--precision"):
+        precision = int(arg)       
 
 
 # 1) We extract the needed data:
-pdb_id = "6b87"
-thresold_ASA = 20 #Considered accessible if ASA up to thresold
+thresold_ASA = 30 #Considered accessible if ASA up to thresold
 
-if len(arg_cmd) == 2:
-    path_to_naccess_exe = 'naccess'
-else:
-    path_to_naccess_exe = arg_cmd[2]
-
-dict_CA, nb_accessible_CA, nb_tot_CA = get_acessible_CA( pdb_id, 
+dict_CA, nb_accessible_CA, nb_tot_CA = get_acessible_CA( inputFile, 
                                                          path_to_naccess_exe, 
                                                          thresold_ASA)
 
-pdbFile = open('../data/' + pdb_id + ".pdb", 'r')
-dict_CA, list_resid, centerOfMass = get_coord( dict_CA, 
-                                               nb_accessible_CA, 
-                                               nb_tot_CA,
-                                               pdbFile,
-                                               pdb_id)
-pdbFile.close()
+
+dict_CA, list_resid, centerOfMass = get_coord( dict_CA, nb_accessible_CA, 
+                                               nb_tot_CA, inputFile)
 
 
 # 2) We transform the coordinates to set the center of mass as the origin:
@@ -500,8 +551,6 @@ dict_CA = transform_coord(dict_CA, centerOfMass)
 #y = r * sin(phi) * sin(theta)
 #z = r * cos(phi)
 
-precision = int(arg_cmd[1])
-
 #These arrays need to be created only one:
 arr_cos_theta, arr_sin_theta = generate_trigo_arr(precision)
 arr_cos_phi, arr_sin_phi = arr_cos_theta, arr_sin_theta
@@ -513,7 +562,6 @@ size_arr = precision + 1
 vectArr_X = arr_cos_theta[:, np.newaxis] @ arr_sin_phi[np.newaxis, :]
 vectArr_Y = arr_sin_theta[:, np.newaxis] @ arr_sin_phi[np.newaxis, :]
 vectArr_Z = np.tile( arr_cos_phi, (size_arr, 1) )
-
 
 #REMARK: The vectArr_Z has been created by repeating the line of cos(phi) as many
 #times there are values for the theta angle
@@ -530,27 +578,23 @@ arr_mean_freq = np.zeros( (size_arr, size_arr) )
 start_dist_plane_arr = np.zeros( (size_arr, size_arr) , dtype = int)
 arr_nb_slides = np.zeros( (size_arr, size_arr) , dtype = int)
 
-for i in range(size_arr):
-    for j in range(size_arr):
-        unit_vect = arr_unit_vect[:, i, j]
-            
-        #4-1) We position the plan well:
-        tuple_returned = start_position_plane( unit_vect, 
-                                               dict_CA, 
-                                               nb_accessible_CA,
-                                               list_resid )
-        nb_slides, start_dist_points_arr, start_dist_plane = tuple_returned
-        start_dist_plane_arr[i, j] = start_dist_plane
-        arr_nb_slides[i, j] = nb_slides
-        
-        #4-2) We slide along the current direction:   
-        arr_mean_freq[i, j] = sliding_slice( nb_slides, 
-                                             start_dist_points_arr, 
-                                             nb_accessible_CA, 
-                                             dict_CA, 
-                                             list_resid ) 
+#for i in range(size_arr):
+#    for j in range(size_arr):
 
-#print(arr_nb_slides)
+
+#Parallelization
+input = ((i, j) for i, j in itr.combinations_with_replacement(range(size_arr), 2))
+p = mp.Pool()
+flat_mean_freq = np.array(p.map(parallelized_fun, input))
+arr_mean_freq = flat_mean_freq.reshape( (size_arr, size_arr) )
+p.close()
+p.join()
+print(results)
+        
+
+print("MAX_FREQ = ", np.max(arr_mean_freq))
+print("\nESPACE\n")
+print(np.nonzero(arr_mean_freq - np.max(arr_mean_freq)) == 0)
 
 # 5) Determination of the indexes of this maximum value 
 #inside the arr_mean_freq:
@@ -569,27 +613,14 @@ best_start_dist_plane = start_dist_plane_arr[idx_theta, idx_phi]
 
 ma_direction = arr_unit_vect[:, 3, 4]
 print('\n ESPACE \n')
-dist_best_plane = improve_mb_position( ma_direction, 
-                                       dict_CA, 
-                                       nb_accessible_CA, 
-                                       list_resid,
-                                       best_start_dist_plane )
+dist_best_plane = improve_mb_position( ma_direction, dict_CA, nb_accessible_CA, 
+                                       list_resid, best_start_dist_plane )
 
 
 # 6) Manage the output:
 
-outFile = open("../results/" + pdb_id + "_out.pdb", 'a')
-
-calc_coord_plane( best_direction, 
-                dist_best_plane, 
-                outFile, 
-                centerOfMass, 
-                idx_best_angles,
-                precision,
-                arr_cos_phi, 
-                arr_sin_phi )
-
-outFile.close()
+calc_coord_plane(inputFile, best_direction, dist_best_plane, centerOfMass,
+                     arr_cos_phi, arr_sin_phi)
 
 print("RUNTIME = ", time.time() - start_time)
 
