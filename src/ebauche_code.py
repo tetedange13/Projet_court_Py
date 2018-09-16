@@ -214,6 +214,7 @@ def start_position_plane(unit_vect, dict_CA, nb_CA, list_resid):
     #Start plane, far from the protein:
     initial_dist = 1000
     initial_plane = np.hstack( (initial_dist*unit_vect, -initial_dist**2) )
+    print("INTIAL = ", initial_plane)
 
     #Will contain dist between each point and the plane:
     start_dist_points_arr = np.zeros((nb_CA, 1)) 
@@ -262,9 +263,9 @@ def freq_hydrophob(start_dist_points_arr, nb_CA, dict_CA, list_resid):
                 nb_hydrophob_accessible += 1
     
     #if nb_hydrophob_accessible/nb_accessible > 0.3:
-        #print("NB_HYDROPHB= ",nb_hydrophob_accessible, "NB_ACCESS= ",nb_accessible)
-        #print("FREQ = ", nb_hydrophob_accessible/nb_accessible)
-    return nb_hydrophob_accessible/nb_accessible
+    #print("NB_HYDROPHB= ",nb_hydrophob_accessible, "NB_ACCESS= ",nb_accessible)
+    #print("FREQ = ", nb_hydrophob_accessible/nb_accessible)
+    return (nb_hydrophob_accessible, nb_accessible)
 
 
 
@@ -285,31 +286,45 @@ def sliding_slice(nb_slides, start_dist_points_arr, nb_CA, dict_CA, list_resid):
     dist_arr = start_dist_points_arr
     sum_freq_hydrophob = 0
     step_slides = 1
+    list_freq = [0] * nb_slides
+    arr_nb_hydrophob_accessible = np.zeros(nb_slides)
     
     for r in range(0, nb_slides, step_slides):
-        sum_freq_hydrophob += freq_hydrophob( dist_arr, 
-                                              nb_CA, 
-                                              dict_CA, 
-                                              list_resid )
-        dist_arr -= step_slides #We slide the slice of 1A
+        nb_hydrophob_accessible, nb_accessible = freq_hydrophob( dist_arr, nb_CA, dict_CA, list_resid )
         
-
-    return sum_freq_hydrophob/nb_slides
+        sum_freq_hydrophob += nb_hydrophob_accessible/nb_accessible
+        arr_nb_hydrophob_accessible[r] = nb_accessible
+        
+        dist_arr -= step_slides #We slide the slice of 1A
+        list_freq[r] = nb_hydrophob_accessible/nb_accessible
+    
+    #print(list_freq)
+    return np.mean(arr_nb_hydrophob_accessible) * sum_freq_hydrophob/nb_slides
          
 
 
-def dist_point_origin(point):
-    """Calculates the distance between a point (given by its coordinates inside
-    a dict) and the origin of the system"""
+def parallelized_fun(tupl):
+    """To calculate the mean freq_hydrophob on all the directions (in a 
+    parallelized way)"""
     
-    arr_point = dict_to_arr(point)
-    
-    return np.sqrt( arr_point @ arr_point.T )
+    i,j = tupl
+    unit_vect = arr_unit_vect[:, i, j]
+            
+    #4-1) We position the plan well:
+    tuple_returned = start_position_plane( unit_vect, dict_CA, 
+                                               nb_accessible_CA, list_resid )
+    nb_slides, start_dist_points_arr, start_dist_plane = tuple_returned
+    start_dist_plane_arr[i, j] = start_dist_plane
+    arr_nb_slides[i, j] = nb_slides
+        
+    #4-2) We slide along the current direction:   
+    return sliding_slice( nb_slides, start_dist_points_arr, 
+                                             nb_accessible_CA, dict_CA, 
+                                             list_resid )         
 
 
 
-def improve_mb_position(best_direction, dict_CA, nb_CA, 
-                        list_resid, best_start_dist_plane):
+def improve_mb_position(best_direction, dict_CA, nb_CA, list_resid):
     #Je l'ai un peu optimisée, pour éviter de stocker en memoire une matrice de
     #freq, que je dois ensuite parcourir pour trouver le max avec np.argmax()
     #Par contre, le repositionnement du plan au debut, il est pas tres 
@@ -343,7 +358,7 @@ def improve_mb_position(best_direction, dict_CA, nb_CA,
         dist_arr -= 1 #We slide the slice of 1A
     
         
-    return best_start_dist_plane - idx_max_freq
+    return idx_max_freq
 
 
 def draw_point(point, num, outFile):
@@ -356,7 +371,8 @@ def draw_point(point, num, outFile):
     
 
 def draw_axis(start, end, step, best_direction, centerOfMass, outFile):
-    """Draws an axis from a direction, given by a unit vector"""               
+    """Draws an axis from a direction, given by a unit vector""" 
+                  
     for r in range(start, end, step):
         point_to_write = r * best_direction + centerOfMass
         draw_point(point_to_write, r, outFile)
@@ -488,22 +504,7 @@ def calc_coord_plane(inputFile, best_direction, dist_best_plane, centerOfMass,
     return
 
  
-def parallelized_fun(tupl):
-    i,j = tupl
-    unit_vect = arr_unit_vect[:, i, j]
-            
-    #4-1) We position the plan well:
-    tuple_returned = start_position_plane( unit_vect, dict_CA, 
-                                               nb_accessible_CA, list_resid )
-    nb_slides, start_dist_points_arr, start_dist_plane = tuple_returned
-    start_dist_plane_arr[i, j] = start_dist_plane
-    arr_nb_slides[i, j] = nb_slides
-        
-    #4-2) We slide along the current direction:   
-    return sliding_slice( nb_slides, start_dist_points_arr, 
-                                             nb_accessible_CA, dict_CA, 
-                                             list_resid )      
-   
+
 
 
 #MAIN
@@ -573,28 +574,29 @@ arr_unit_vect[1, :, :] = vectArr_Y
 arr_unit_vect[2, :, :] = vectArr_Z
 
 
-# 4) Loop To calculate the mean freq_hydrophob on all the directions:
-arr_mean_freq = np.zeros( (size_arr, size_arr) )
+# 4) Loop 
 start_dist_plane_arr = np.zeros( (size_arr, size_arr) , dtype = int)
 arr_nb_slides = np.zeros( (size_arr, size_arr) , dtype = int)
 
-#for i in range(size_arr):
-#    for j in range(size_arr):
 
 
-#Parallelization
-input = ((i, j) for i, j in itr.combinations_with_replacement(range(size_arr), 2))
-p = mp.Pool()
-flat_mean_freq = np.array(p.map(parallelized_fun, input))
-arr_mean_freq = flat_mean_freq.reshape( (size_arr, size_arr) )
-p.close()
-p.join()
-print(results)
-        
 
-print("MAX_FREQ = ", np.max(arr_mean_freq))
-print("\nESPACE\n")
-print(np.nonzero(arr_mean_freq - np.max(arr_mean_freq)) == 0)
+#Parallelization:
+input = ( (i, j) for i, j in itr.product(range(size_arr), range(size_arr)) )
+#p = mp.Pool()
+#flat_mean_freq = np.array(p.map(parallelized_fun, input))
+#arr_mean_freq = flat_mean_freq.reshape( (size_arr, size_arr) )
+#p.close()
+#p.join()
+
+arr_mean_freq = np.zeros( (size_arr, size_arr) )
+for i in range(size_arr):
+    for j in range(size_arr):
+        #if j > i+1:
+        arr_mean_freq[i, j] = parallelized_fun((i, j))
+
+
+
 
 # 5) Determination of the indexes of this maximum value 
 #inside the arr_mean_freq:
@@ -608,13 +610,16 @@ theta = str(idx_theta) + 'pi/' + str(precision)
 phi = str(idx_phi) + 'pi/' + str(precision)
 print("THETA = ", theta, " ; ", "PHI = ", phi)
 
+print(arr_mean_freq)
+print( parallelized_fun((4, 6)) )
 
+
+# 6) Finding the best position of the mb along the best direction:
 best_start_dist_plane = start_dist_plane_arr[idx_theta, idx_phi]
+idx_max_freq = improve_mb_position( best_direction, dict_CA, 
+                                    nb_accessible_CA, list_resid )
+dist_best_plane = best_start_dist_plane - idx_max_freq
 
-ma_direction = arr_unit_vect[:, 3, 4]
-print('\n ESPACE \n')
-dist_best_plane = improve_mb_position( ma_direction, dict_CA, nb_accessible_CA, 
-                                       list_resid, best_start_dist_plane )
 
 
 # 6) Manage the output:
@@ -622,7 +627,7 @@ dist_best_plane = improve_mb_position( ma_direction, dict_CA, nb_accessible_CA,
 calc_coord_plane(inputFile, best_direction, dist_best_plane, centerOfMass,
                      arr_cos_phi, arr_sin_phi)
 
-print("RUNTIME = ", time.time() - start_time)
+print("TOT_RUNTIME = ", time.time() - start_time, '\n')
 
 
 
