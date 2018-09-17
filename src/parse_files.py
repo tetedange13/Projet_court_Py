@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 
-
+import os
 from Bio.PDB import PDBParser 
 from Bio.PDB.NACCESS import run_naccess
+
 
 
 def get_acessible_CA(inputFile, path_to_naccess_exe, thresold_ASA):
@@ -58,7 +59,7 @@ def get_coord(dict_CA, nb_accessible_CA, nb_tot_CA, inputFile):
     pdbFile = open(inputFile, 'r')
     pdb_id = os.path.basename(inputFile).split('.')[0]
     
-    outFile = open("../results/" + pdb_id + '_out.pdb', 'w')
+    outFile = open("./results/" + pdb_id + '_out.pdb', 'w')
     
     #To index the resid
     list_resid = [0] * nb_accessible_CA ; i = 0

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from src.parse_files import *
+from src.geometry import *
 import sys
 import time
 from getopt import getopt
@@ -8,95 +9,6 @@ import itertools as itr
 import multiprocess as mp
 
 
-
-def transform_coord(dict_coord, centerOfMass):
-    """Takes the coordinates of the CA of the protein, its center of mass and
-    returns a dict with transformed coord, i.e. with the center of mass set as 
-    the origin of the system."""
-    
-    transformed_dict = dict_coord #To avoid side effects
-    for resid in dict_coord.keys():
-        transformed_dict[resid]['x'] -= centerOfMass[0]
-        transformed_dict[resid]['y'] -= centerOfMass[1]
-        transformed_dict[resid]['z'] -= centerOfMass[2]
-        
-        
-    return transformed_dict
-
-
-
-def generate_trigo_arr(precision):
-    """Prend un pas (sorte de resolution), decoupe le cercle trigo et renvoie 2
-     matrices colonnes des cos et sin de ces angles"""
-     
-    #Prop of trigo functions trigo used:
-    #cos(pi-x) = -cos(x) ; sin(pi-x) = sin(x) <=> N-O dial
-    #cos(pi+x) = -cos(x) ; sin(pi+x) = -sin(x) <=> S-O dial
-    #cos(-x) = cos(x) ; sin(-x) = -sin(x) <=> S-E dial
-    
-    size_arr = precision+1
-    arr_cos = np.zeros( size_arr, dtype=float )
-    arr_sin = np.zeros( size_arr, dtype=float )
-    
-    
-    #We start with filling with evident values (not zero) of cos et sin:
-    #En 0:
-    arr_cos[0] = 1.0
-    #En pi:
-    arr_cos[precision] = -1.0
-    
-    if precision%2 == 0: #If the precision is even, there is also pi/2
-        idx_pi_over_2 = int( size_arr/2 )
-        #En pi/2:
-        arr_sin[idx_pi_over_2] = 1.0 
-            
-            
-    #N-E DIAL (will serve as a reference to fill the other dial):
-    i=1
-    for angle in np.arange(np.pi/precision, 
-                           np.pi/2 - 1/precision, 
-                           np.pi/precision):
-    #J'ai trouve le "-1/pas" un peu empiriquement => A VOIR...
-        arr_cos[i] = np.cos(angle)
-        arr_sin[i] = np.sin(angle)
-        i += 1     
-    
-    #N-O dial:  
-    nb_to_calc = i - 1 #Number of values to calculate
-    
-    #Depending on the parity of the precision, the start changes:
-    if precision%2 == 0:  
-        start = idx_pi_over_2 + 1
-    else:
-        start = i 
-        
-    end = start + nb_to_calc
-    
-    arr_cos[start:end] = -arr_cos[1:i][::-1]
-    arr_sin[start:end] = arr_sin[1:i][::-1]
-    
-    return (arr_cos, arr_sin)        
-    
-
-
-def dict_to_arr(point):
-    """Takes a point as a dict and convert it in a array(3,1)"""
-    
-    return np.array( [ point['x'], point['y'], point['z'] ] )
-        
-
-
-def dist_point_plane(point, plane):
-    """Prend un point provenant du pdb (donc un dict)
-    et un plan = (a, b; c; d), avec:
-        -- (a; b; c)  = (x; y; z) du point au bout d'un vecteur 
-        -- et d = -Rcarre"""
-    
-    arr_point = np.hstack( (dict_to_arr(point), 1) )
-        
-    numer = abs( arr_point @ plane.T )
-    denom = np.sqrt( plane[0:3, ] @ plane[0:3, ].T )
-    return numer/denom
 
 
 #To simplify the syntax, in the next functions, the use of "CA" in any variable
@@ -131,13 +43,12 @@ def start_position_plane(unit_vect, dict_CA, nb_CA, list_resid):
         list_resid[i] = resid
         i += 1
 
-    start_dist_plane = np.floor( initial_dist - np.min(start_dist_points_arr) )
+    start_dist_plane = np.floor(initial_dist - np.min(start_dist_points_arr)) +1
     end_dist_plane = np.floor( initial_dist - np.max(start_dist_points_arr) ) 
-    #=> Que faire si la dist entre le plus pres et le plus loi es trop petite ??
     
     #We transform the dist array, to adapt to the well positionned plane:
     start_dist_points_arr -= (initial_dist - start_dist_plane)
-    nb_slices = int( start_dist_plane - end_dist_plane + 15 ) #OUI je pense
+    nb_slices = int( start_dist_plane - end_dist_plane ) - 15
 
     
     #For further improval, we need the start dist for the plan (last arg):
@@ -158,7 +69,7 @@ def freq_hydrophob(start_dist_points_arr, nb_CA, dict_CA, list_resid):
                          "MET", "VAL", "TRP", "TYR"] 
     
     for i in range(nb_CA):
-        if -15 <= start_dist_points_arr[i, ] <= 0: #For the aa in the slice
+        if 0 <= start_dist_points_arr[i, ] <= 15: #For the aa in the slice
             nb_accessible += 1
             
             resid = list_resid[i]
@@ -207,18 +118,17 @@ def parallelized_fun(tupl):
     
     i,j = tupl
     unit_vect = arr_unit_vect[:, i, j]
+    
             
     #4-1) We position the plan well:
     tuple_returned = start_position_plane( unit_vect, dict_CA, nb_accessible_CA,
                                            list_resid )
     nb_slices, start_dist_points_arr, start_dist_plane = tuple_returned
-    start_dist_plane_arr[i, j] = start_dist_plane
-    arr_nb_slices[i, j] = nb_slices
         
     #4-2) We slide along the current direction:   
-    return sliding_slice( nb_slices, start_dist_points_arr, 
-                                             nb_accessible_CA, dict_CA, 
-                                             list_resid )         
+    return ( start_dist_plane, sliding_slice(nb_slices, start_dist_points_arr, 
+                                             nb_accessible_CA, dict_CA,
+                                             list_resid) )         
 
 
 
@@ -248,14 +158,14 @@ def improve_mb_position(best_direction, dict_CA, nb_CA, list_resid):
 
     for r in range(1, nb_slices):
         new_freq = freq_hydrophob(dist_arr, nb_CA, dict_CA, list_resid)
-      
+
         if new_freq > current_max_freq:
             current_max_freq = new_freq
             idx_max_freq = r
             
         dist_arr -= 1 #We slide the slice of 1A
     
-        
+
     return idx_max_freq
 
 
@@ -268,29 +178,32 @@ def draw_point(point, num, outFile):
                                          point[2] ))
     
 
-def draw_axis(start, end, step, best_direction, centerOfMass, outFile):
+def draw_axis(start, end, best_direction, centerOfMass, outFile):
     """Draws an axis from a direction, given by a unit vector""" 
+    
+    step = 5
+    if start == 0 and end < 0: step *= -1    
                   
     for r in range(start, end, step):
-        point_to_write = r * best_direction + centerOfMass
+        point_to_write = r * best_direction
         draw_point(point_to_write, r, outFile)
 
         
                                         
-def draw_plane(dist_best_plane, idx_best_angles, precision, 
+def draw_plane_2(dist_best_plane, idx_best_angles, precision, 
                centerOfMass, outFile):
     gap = 5 #Distance between two consecutive points
     limit_angle = 3*np.pi/7
-    nb_points = 5
+    nb_points = 5 * dist_best_plane
     unit_angle = limit_angle/nb_points
     
     idx_theta, idx_phi = idx_best_angles
     theta, phi = idx_best_angles * np.pi / precision
-    
+
     for i in range(1, nb_points):
-        angle = np.arctan(i * gap / dist_best_plane) 
+        angle = np.arctan(i * gap / dist_best_plane)
         H = dist_best_plane / np.cos(phi + angle)
-        
+
         for j in range(8):
             X_point = H * np.sin(phi + angle) * np.cos(theta + j*np.pi/4)
             Y_point = H * np.sin(phi + angle) * np.sin(theta + j*np.pi/4)
@@ -298,49 +211,50 @@ def draw_plane(dist_best_plane, idx_best_angles, precision,
             point = np.array( [X_point, Y_point, Z_point] ) + centerOfMass
             draw_point(point, i, outFile)
 
-            
-            
-def draw_planes(dist_best_plane, trigo_phi, trigo_theta, centerOfMass,
-                arr_trigo_phiShift, arr_trigo_thetaShift, 
-                outFile, mode="hollow"):
-    #cos(a + b) = cos(a)*cos(b) - sin(a)*sin(b)
-    #sin(a + b) = sin(a)*cos(b) + sin(b)*cos(a)
+
+
+def draw_plane(best_direction, dist_best_plane, centerOfMass, outFile):
+    """Calculate the coordinates of the points belonging to the planes which
+    are normal to the best direction and draw these planes by writing (appending)
+    DUM atoms inside a pdb file"""
     
-    cos_phi, sin_phi = trigo_phi ; cos_theta, sin_theta = trigo_theta
-    arr_cos_phiShift, arr_sin_phiShift = arr_trigo_phiShift
-    arr_cos_thetaShift, arr_sin_thetaShift = arr_trigo_thetaShift
-
-    if mode == "plain":
-        width_circle = 3 #Number of points in the radium of the external circle
-        start = nb_points - width_circle
-    elif mode == "hollow":
-        start = 1
+    best_vect = best_direction * dist_best_plane
     
-    for i in range(start, nb_points):
-        cos_phiShift, sin_phiShift = arr_cos_phiShift[i], arr_sin_phiShift[i]
+    produit = np.dot( np.array([0.0, 0.0, 1.0])[np.newaxis, :],
+                      best_vect[:, np.newaxis] )[0][0]
+    cos_transform = produit / dist_best_plane                  
+    sin_transform = np.sqrt(1 - cos_transform**2)
+    transform_arr = np.array([[cos_transform, 0, sin_transform], 
+                              [0, 1, 0], 
+                              [-sin_transform, 0, cos_transform]])
+    
+    #We draw a cross at the origin:
+    for i in range(-15, 15, 2):
+        prod_3 = transform_arr @ np.array([0, 0, i])[:, np.newaxis]
+        draw_point(prod_3.reshape(3) + centerOfMass, 3, outFile)
+    
+    #Then we draw the 2 planes, we are orthogonal to the best direction:
+    for i in range(-20, 20, 5):
+        point_3 = transform_arr @ np.array([i, 0, 0])[:, np.newaxis].reshape(3)
+        draw_point(point_3 + centerOfMass, 3, outFile)
+        point_4 = transform_arr @ np.array([0, i, 0])[:, np.newaxis].reshape(3)
+        draw_point(point_4 + centerOfMass, 4, outFile)
+    
+        for j in range(-20, 20, 5):
+            prod_1 = transform_arr @ np.array([i, j, dist_best_plane])[:, np.newaxis]
+            prod_2 = transform_arr @ np.array([j, i, dist_best_plane - 15])[:, np.newaxis]
         
-        cos_phiShifted = cos_phi*cos_phiShift - sin_phi*sin_phiShift
-        sin_phiShifted = sin_phi*cos_phiShift + cos_phi*sin_phiShift
+            point_1 = prod_1.reshape(3)
+            point_2 = prod_2.reshape(3)
         
-        H = dist_best_plane / cos_phiShifted     
-        period = len(arr_cos_phiShift)
-        
-        for j in range(2*period):
-            cos_thetaShift = arr_cos_thetaShift[j]
-            sin_thetaShift = arr_sin_thetaShift[j]
-            cos_thetaShifted = cos_theta*cos_thetaShift-sin_theta*sin_thetaShift
-            sin_thetaShifted = sin_theta*cos_thetaShift+cos_theta*sin_thetaShift
-        
-            X_point = H * sin_phi_shifted * cos_thetaShifted
-            Y_point = H * sin_phi_shifted * sin_thetaShifted
-            Z_point = H * cos_phi_shifted
-            point = np.array( [X_point, Y_point, Z_point] ) + centerOfMass
-            draw_point(point, i, outFile)
+            draw_point(point_1 + centerOfMass, 1, outFile)
+            draw_point(point_2 + centerOfMass, 2, outFile)
             
 
 
-def calc_coord_plane(inputFile, best_direction, dist_best_plane, centerOfMass,
-                     arr_cos, arr_sin, mode="hollow"):
+
+def calc_coord_plane(inputFile, best_direction, dist_best_plane, 
+                     centerOfMass, precision):
     """To be able to have a nice PyMol output of our plan, we need to determine
     the coordinates of the 4 corners of our plane 
     (represented as a 3D rectangle)"""
@@ -358,24 +272,12 @@ def calc_coord_plane(inputFile, best_direction, dist_best_plane, centerOfMass,
     #z = r * cos(phi)
     
     #Draw the axis orthogonal to the membrane
-    draw_axis(0, dist_best_plane, 5, best_direction, centerOfMass, outFile)
-    draw_axis(-25, 25, 5, best_direction, centerOfMass, outFile)
+    #draw_axis(0, dist_best_plane, best_direction, centerOfMass, outFile)
+    draw_axis(-30, 30, best_direction, centerOfMass, outFile)
         
-    idx_theta, idx_phi = idx_best_angles
-    trigo_phi = np.array([ arr_cos[idx_phi], arr_sin[idx_phi] ])
-    trigo_theta = np.array([ arr_cos[idx_theta], arr_sin[idx_theta] ])
-    
-    limit_angle =  2*np.pi/7
-    nb_points = 10
-    phiShift = limit_angle/nb_points #Angle between two consecutive points
-    #arr_trigo_phiShift = generate_trigo_arr(phiShift)
-    
-    density = 8 ; thetaShift = np.pi/density
-    #arr_trigo_thetaShift = generate_trigo_arr(theta_Shift)
-
-    #draw_plane(dist_best_plane, idx_best_angles, precision, centerOfMass, outFile)
-    #draw_planes(dist_best_plane+15, trigo_phi, trigo_theta, centerOfMass,
-                #arr_trigo_phiShift, arr_trigo_thetaShift, outFile)   
+    #draw_plane(dist_best_plane, idx_best_angles, precision, 
+    #           centerOfMass, outFile)
+    draw_plane(best_direction, dist_best_plane, centerOfMass, outFile)
     
     
     #We write a pymol_file, which can be executed automaticly:
@@ -389,9 +291,9 @@ def calc_coord_plane(inputFile, best_direction, dist_best_plane, centerOfMass,
     for ligne in (loading, bg, sticks, spheres):
         pymol_file.write(ligne)
     
-    pymol_file.close()
+    outFile.close() ; pymol_file.close()
     
-    outFile.close()
+    
     
     
     
@@ -406,6 +308,7 @@ def calc_coord_plane(inputFile, best_direction, dist_best_plane, centerOfMass,
 
 
 #MAIN
+#if __name__ == "__main__":
 
 start_time = time.time()
 
@@ -473,7 +376,6 @@ arr_unit_vect[2, :, :] = vectArr_Z
 
 
 # 4) Loop 
-start_dist_plane_arr = np.zeros( (size_arr, size_arr) , dtype = int)
 arr_nb_slices = np.zeros( (size_arr, size_arr) , dtype = int)
 
 
@@ -482,8 +384,12 @@ arr_nb_slices = np.zeros( (size_arr, size_arr) , dtype = int)
 #Parallelization:
 input = ( (i, j) for i, j in itr.product(range(size_arr), range(size_arr)) )
 p = mp.Pool(mp.cpu_count())
-flat_mean_freq = np.array(p.map(parallelized_fun, input))
-arr_mean_freq = flat_mean_freq.reshape( (size_arr, size_arr) )
+results = p.map(parallelized_fun, input)
+start_dist_plane_list = [result[0] for result in results]
+mean_freq_list = [result[1] for result in results]
+flat_start_dist_plane = np.array(start_dist_plane_list, dtype = int)
+start_dist_plane_arr = flat_start_dist_plane.reshape( (size_arr, size_arr) )
+arr_mean_freq = np.array(mean_freq_list).reshape( (size_arr, size_arr) )
 p.close()
 p.join()
 
@@ -508,24 +414,20 @@ theta = str(idx_theta) + 'pi/' + str(precision)
 phi = str(idx_phi) + 'pi/' + str(precision)
 print("THETA = ", theta, " ; ", "PHI = ", phi)
 
-#print(arr_mean_freq[:, 6])
-#print( parallelized_fun((2, 6)) )
-print(arr_nb_slices)
-print(np.min(arr_nb_slices))
-
 
 # 6) Finding the best position of the mb along the best direction:
 best_start_dist_plane = start_dist_plane_arr[idx_theta, idx_phi]
+print("START_DIST =", best_start_dist_plane)
 idx_max_freq = improve_mb_position( best_direction, dict_CA, 
                                     nb_accessible_CA, list_resid )
 dist_best_plane = best_start_dist_plane - idx_max_freq
-
+print("DIST =", dist_best_plane)
 
 
 # 6) Manage the output:
 
-calc_coord_plane(inputFile, best_direction, dist_best_plane, centerOfMass,
-                     arr_cos_phi, arr_sin_phi)
+calc_coord_plane(inputFile, best_direction, dist_best_plane, 
+                     centerOfMass, precision)
 
 print("TOT_RUNTIME = ", time.time() - start_time, '\n')
 
