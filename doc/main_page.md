@@ -57,7 +57,7 @@ the program. 1uaz and 6b87 are both TM protein, contrary to 1uw3, which is a
 globular one. \n
 Let's see an example:
 \verbatim
-./main.py -i ./data/6b87.pdb -p --naccess ../../Nacces/naccess --ASA 25
+./main.py -i ./data/6b87.pdb -p 15 --naccess ../../Nacces/naccess --ASA 25
 \endverbatim
 Here we have set the precision ("-p") at 15, which will generate about 15*15
 different directions of research. It should take around 3 secondes on a 2-cores

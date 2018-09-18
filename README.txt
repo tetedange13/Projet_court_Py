@@ -14,6 +14,13 @@ EMERGENCY README
 ================
 
 
+Emergency description
+---------------------
+The project consists in reimplementing an existing algorithm that finds
+transmembrane parts from transmembrane proteins
+From this article: https://doi.org/10.1093/bioinformatics/bth340
+
+
 Emergency procedure
 -------------------
 
@@ -34,12 +41,28 @@ If it is still not working, the essential of the documentation is below.
 Just imagine that it is nice and beautiful:
 
 
+Requirements
+------------
+* Naccess program is needed (http://wolf.bms.umist.ac.uk/naccess/, psswd = "nac97")
+
+* As for the following python modules: numpy, biopython and multiprocess
+(not a precise version needed)
+
+
 
 Emergency content
 -----------------
 
-* Context: We had 
+Help can be found with:
+    ./main.py --[h]elp
+    
+    >> "Usage: main.py -i <inputFile.pdb> --[n]access" \
+                " <path_to_naccess_exe> --[p]recision <int>" \
+                " --[a]sa <float(thresoldASA)>"
+                
 
+Example of how to run the script, with all the parameters:
+    ./main.py -i ./data/6b87.pdb -p 50 --naccess ../../Nacces/naccess --ASA 25
 
 
 

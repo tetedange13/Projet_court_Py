@@ -5,7 +5,7 @@ from src.geometry import *
 from src.drawing import *
 
 import sys
-import time
+from time import time 
 from getopt import getopt
 import itertools as itr
 import multiprocess as mp
@@ -154,7 +154,7 @@ def sliding_slice(nb_slices, start_dist_points_arr, nb_CA, dict_CA, list_resid):
     
     
     #Needed to add the square of nb_slices to avoid the biais on nb_slices
-    return nb_slices**2 * sum_freq_hydrophob/nb_CA
+    return sum_freq_hydrophob/nb_CA
          
 
 
@@ -242,7 +242,7 @@ def improve_mb_position(best_direction, dict_CA, nb_CA, list_resid):
 #MAIN
 if __name__ == "__main__":
 
-    start_time = time.time()
+    start_time = time()
 
     # 0) We parse the arguments given:
     path_to_naccess_exe = 'naccess'
@@ -268,7 +268,7 @@ if __name__ == "__main__":
         
         elif opt in ("-p", "--precision"):
             precision = int(arg)
-            
+            print(precision)
         elif opt in ("-a", "--asa"):
             threshold_ASA = float(arg)    
             
@@ -318,11 +318,14 @@ if __name__ == "__main__":
     arr_unit_vect[1, :, :] = vectArr_Y
     arr_unit_vect[2, :, :] = vectArr_Z
 
-
+    
+    ref_time_parall = time()
     # 4) Parallelized nest for loop, which :
     input = ( (i, j) for i, j in itr.product(range(size_arr), range(size_arr)) )
     p = mp.Pool(mp.cpu_count())
     results = p.map(parallelized_fun, input)
+    
+    print("PARALL_TIME = ", time() - ref_time_parall)
 
     start_dist_plane_list = [result[0] for result in results]
     mean_freq_list = [result[1] for result in results]
@@ -333,6 +336,15 @@ if __name__ == "__main__":
 
     p.close()
     p.join()
+    
+    
+    #ref_time_serial = time()
+    
+    #for i in range(size_arr):
+    #    for j in range(size_arr):
+    #        parallelized_fun((i, j))
+            
+    #print("SERIAL_TIME = ", time() - ref_time_serial)        
 
 
     # 5) Determination of the indexes of this maximum value 
@@ -359,7 +371,7 @@ if __name__ == "__main__":
     pdb_id = os.path.basename(inputFile).split('.')[0]
     esthetic_output(pdb_id, best_direction, dist_best_plane, precision)
 
-    print("TOT_RUNTIME = ", time.time() - start_time, '\n')
+    print("TOT_RUNTIME = ", time() - start_time, '\n')
 
 
 
