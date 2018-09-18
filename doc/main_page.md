@@ -39,11 +39,39 @@ The sources  can be found on my Git repository:
 git clone https://github.com/tetedange13/Projet_court_Py 
 \endverbatim
 But it's a bit messy... The best is still to use this nice archive that I 
-dropped off on Moodle!
+dropped off on Moodle!\n
 \n
 
 
 \section use Usage
+\subsection template Template of execution command line
+The programm is called by executing "main.py". It takes several arguments, you
+can have more information about the general use by typing
+\verbatim
+./main.py --[h]elp
+\endverbatim \n
+
+\subsection eg An example
+Inside of the data/ folder, you have a couple of pdb files, on which you can try
+the program. 1uaz and 6b87 are both TM protein, contrary to 1uw3, which is a
+globular one. \n
+Let's see an example:
+\verbatim
+./main.py -i ./data/6b87.pdb -p --naccess ../../Nacces/naccess --ASA 25
+\endverbatim
+Here we have set the precision ("-p") at 15, which will generate about 15*15
+different directions of research. It should take around 3 secondes on a 2-cores
+machine.
+Depending on your own machine and the time you have, you can set a higher 
+precision. \n
+The script generate a **out pdb file, containing supplementary "DUM" atoms**, to
+ represents the results of its search\n
+It also generates a **PyMOL .pml file**, which contains a few commands for a
+ nicelydisplay of the output pdb file. It can be launched like this:
+\verbatim
+pymol ./results/cmd_pymol.pml
+\endverbatim
+
 
 \n
 

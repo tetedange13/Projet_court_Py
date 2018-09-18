@@ -1,32 +1,36 @@
 #!/usr/bin/env python3
 
+
+"""
+This module contains all functions related to the manipulations of geometrical 
+objects like points (can be numpy arrays or dict), vectors (more often numpy
+arrays), or planes.
+"""
+
+
+
 import numpy as np
-
-
-def transform_coord(dict_coord, centerOfMass):
-    """Takes the coordinates of the CA of the protein, its center of mass and
-    returns a dict with transformed coord, i.e. with the center of mass set as 
-    the origin of the system."""
-    
-    transformed_dict = dict_coord #To avoid side effects
-    for resid in dict_coord.keys():
-        transformed_dict[resid]['x'] -= centerOfMass[0]
-        transformed_dict[resid]['y'] -= centerOfMass[1]
-        transformed_dict[resid]['z'] -= centerOfMass[2]
-        
-        
-    return transformed_dict
 
 
 
 def generate_trigo_arr(precision):
-    """Prend un pas (sorte de resolution), decoupe le cercle trigo et renvoie 2
-     matrices colonnes des cos et sin de ces angles"""
+    """
+    Share the half of the trigonometric circle in (precision+1) angles and
+    generates 2 arrays, corresponding to the sin and cos of these angles
      
-    #Prop of trigo functions trigo used:
-    #cos(pi-x) = -cos(x) ; sin(pi-x) = sin(x) <=> N-O dial
-    #cos(pi+x) = -cos(x) ; sin(pi+x) = -sin(x) <=> S-O dial
-    #cos(-x) = cos(x) ; sin(-x) = -sin(x) <=> S-E dial
+     
+    Args: precision <int>, approximately the number of directions explored,
+          so can be considered as a resolution  
+     
+    Returns: A tuple of 2 <np.arrays>, both of size(1, (precision+1))
+    
+    
+    REMARK: The function is a bit optimised, on the fact hat we calculate a cos
+    and sin only for 1 dial on 2.
+    The other being deduced from the cos-sin properties as follows:
+    
+        cos(pi-x) = -cos(x) ; sin(pi-x) = sin(x) <=> N-O dial
+    """
     
     size_arr = precision+1
     arr_cos = np.zeros( size_arr, dtype=float )
@@ -50,7 +54,7 @@ def generate_trigo_arr(precision):
     for angle in np.arange(np.pi/precision, 
                            np.pi/2 - 1/precision, 
                            np.pi/precision):
-    #J'ai trouve le "-1/pas" un peu empiriquement => A VOIR...
+        # "-1/precision" found a bit empirically..
         arr_cos[i] = np.cos(angle)
         arr_sin[i] = np.sin(angle)
         i += 1     
@@ -69,24 +73,26 @@ def generate_trigo_arr(precision):
     arr_cos[start:end] = -arr_cos[1:i][::-1]
     arr_sin[start:end] = arr_sin[1:i][::-1]
     
-    return (arr_cos, arr_sin)        
+    return ( np.array([arr_cos]), np.array([arr_sin]) )        
 
-
-
-def dict_to_arr(point):
-    """Takes a point as a dict and convert it in a array(3,1)"""
-    
-    return np.array( [ point['x'], point['y'], point['z'] ] )
-        
 
 
 def dist_point_plane(point, plane):
-    """Prend un point provenant du pdb (donc un dict)
-    et un plan = (a, b; c; d), avec:
-        -- (a; b; c)  = (x; y; z) du point au bout d'un vecteur 
-        -- et d = -Rcarre"""
+    """Calculates the distance between a plane of form (a, b; c; d) and
+    a point of form (x; y; z)
     
-    arr_point = np.hstack( (dict_to_arr(point), 1) )
+    
+    Args: * point <dict> wih keys = ['x', 'y', 'z']
+          * plance <np.array> of size(1, 4)
+          
+    Returns: The distance as a float
+    
+    
+    REMARK: As we are working with planes moving along unit vector with norm R,
+            the d coefficient of any plane -R_square
+    """
+    
+    arr_point = np.hstack( (point['x'], point['y'], point['z'], 1) )
         
     numer = abs( arr_point @ plane.T )
     denom = np.sqrt( plane[0:3, ] @ plane[0:3, ].T )
