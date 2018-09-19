@@ -48,8 +48,8 @@ def get_acessible_CA(inputFile, path_to_naccess_exe, thresold_ASA=30):
     """
     
     #If NACCESS available:
-    #pdb_fileName = os.path.basename(inputFile)
-    #pdb_id = pdb_fileName.split('.')[0]
+    pdb_fileName = os.path.basename(inputFile)
+    pdb_id = pdb_fileName.split('.')[0]
     #p = PDBParser(QUIET = True)
     #structure = p.get_structure(pdb_id, inputFile)
     #model = structure[0]
@@ -57,7 +57,11 @@ def get_acessible_CA(inputFile, path_to_naccess_exe, thresold_ASA=30):
     #                             naccess = path_to_naccess_exe)[0]
     
     #If NACCESS NOT available:
-    naccessFile = open("./data/6b87.rsa", 'r')
+    results_naccess = os.system ("~/Naccess/naccess " + inputFile)
+    os.system("rm -f ./" + pdb_id + ".asa")
+    os.system("rm -f ./" + pdb_id + ".log")
+    os.system("mv ./" + pdb_id + ".rsa ./data/")
+    naccessFile = open("./data/" + pdb_id + ".rsa", 'r')
     output_naccess = naccessFile.readlines()
     naccessFile.close()
      

@@ -117,7 +117,10 @@ def draw_planes(best_direction, dist_best_plane, outFile):
             draw_point(point_1, 1, outFile)
             draw_point(point_2, 2, outFile)
 
-
+    
+    print( "ANGLE = ", np.arccos(cos_transform) )
+    
+    
 
 def esthetic_output(pdb_id, best_direction, dist_best_plane, precision):
     """
@@ -148,6 +151,7 @@ def esthetic_output(pdb_id, best_direction, dist_best_plane, precision):
     
     
     #We write a pymol_file, which can be executed automaticly:
+    #pymol_file = open("./results/cmd_pymol_" + pdb_id + ".pml", 'w')
     pymol_file = open("./results/cmd_pymol.pml", 'w')
     
     loading = "cmd.load('" + outFile.name + "')\n"

@@ -246,6 +246,7 @@ if __name__ == "__main__":
 
     # 0) We parse the arguments given:
     path_to_naccess_exe = 'naccess'
+    precision = 1000
     str_usage = "Usage: main.py -i <inputFile.pdb> --[n]access" \
                 " <path_to_naccess_exe> --[p]recision <int>" \
                 " --[a]sa <float(thresoldASA)>"
@@ -350,6 +351,7 @@ if __name__ == "__main__":
     # 5) Determination of the indexes of this maximum value 
     #inside the arr_mean_freq:
     idx_max_flat = np.argmax(arr_mean_freq)
+    print( "MAX_FREQ = ", np.argmax(arr_mean_freq) )
     idx_max_goodShape = np.unravel_index( idx_max_flat, (size_arr, size_arr) )
     idx_theta = idx_max_goodShape[0] ; idx_phi = idx_max_goodShape[1]
     idx_best_angles = np.array( [idx_theta, idx_phi], dtype=int )
